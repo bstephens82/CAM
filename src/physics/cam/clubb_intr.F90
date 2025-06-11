@@ -382,6 +382,10 @@ module clubb_intr
     thlp3_idx, &       	! thetal 3rd order
     up2_idx, &         	! variance of east-west wind
     vp2_idx, &         	! variance of north-south wind
+  ! BAS
+    up2_zt_idx, &
+    vp2_zt_idx, &
+  ! BAS
     up3_idx, &         	! east-west wind 3rd order
     vp3_idx, &         	! north-south wind 3rd order
     upwp_idx, &        	! east-west momentum flux
@@ -581,7 +585,10 @@ module clubb_intr
     call pbuf_add_field('THLP2_nadv',      'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), thlp2_idx)
     call pbuf_add_field('UP2_nadv',        'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), up2_idx)
     call pbuf_add_field('VP2_nadv',        'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), vp2_idx)
-
+! BAS
+    call pbuf_add_field('UP2_ZT',        'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), up2_zt_idx)
+    call pbuf_add_field('VP2_ZT',        'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), vp2_zt_idx)
+! BAS
     call pbuf_add_field('RTP3',       'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), rtp3_idx)
     call pbuf_add_field('THLP3',      'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), thlp3_idx)
     call pbuf_add_field('UP3',        'global', dtype_r8, (/pcols,pverp,dyn_time_lvls/), up3_idx)
@@ -2001,7 +2008,10 @@ end subroutine clubb_init_cnst
        call pbuf_set_field(pbuf2d, thlp2_idx,   thl_tol**2)
        call pbuf_set_field(pbuf2d, up2_idx,     w_tol_sqd)
        call pbuf_set_field(pbuf2d, vp2_idx,     w_tol_sqd)
-
+! BAS
+       call pbuf_set_field(pbuf2d, up2_zt_idx,  w_tol_sqd)
+       call pbuf_set_field(pbuf2d, vp2_zt_idx,  w_tol_sqd)
+! BAS
        call pbuf_set_field(pbuf2d, rtp3_idx,    0.0_r8)
        call pbuf_set_field(pbuf2d, thlp3_idx,   0.0_r8)
        call pbuf_set_field(pbuf2d, up3_idx,     0.0_r8)
@@ -2382,6 +2392,10 @@ end subroutine clubb_init_cnst
     real(r8) :: rtp2_zt_out(pcols, pverp)        ! CLUBB R-tot variance on thermo levs           [kg^2/kg^2]
     real(r8) :: thl2_zt_out(pcols, pverp)        ! CLUBB Theta-l variance on thermo levs
     real(r8) :: wp2_zt_out(pcols, pverp)
+! BAS
+    real(r8) :: up2_zt_out(pcols,pverp)
+    real(r8) :: vp2_zt_out(pcols,pverp)
+! BAS
     real(r8) :: dlf_liq_out(pcols, pverp)        ! Detrained liquid water from ZM                [kg/kg/s]
     real(r8) :: dlf_ice_out(pcols, pverp)        ! Detrained ice water from ZM                   [kg/kg/s]
     real(r8) :: wm_zt_out(pcols, pverp)          ! CLUBB mean W on thermo levs output            [m/s]
@@ -2427,6 +2441,10 @@ end subroutine clubb_init_cnst
     real(r8), pointer, dimension(:,:) :: thlp3    ! temperature 3rd order			[K^3]
     real(r8), pointer, dimension(:,:) :: up2      ! east-west wind variance			[m^2/s^2]
     real(r8), pointer, dimension(:,:) :: vp2      ! north-south wind variance			[m^2/s^2]
+! BAS
+    real(r8), pointer, dimension(:,:) :: up2_zt      ! east-west wind variance                     [m^2/s^2]
+    real(r8), pointer, dimension(:,:) :: vp2_zt      ! north-south wind variance                   [m^2/s^2]
+! BAS
     real(r8), pointer, dimension(:,:) :: up3      ! east-west wind 3rd order			[m^3/s^3]
     real(r8), pointer, dimension(:,:) :: vp3      ! north-south wind 3rd order			[m^3/s^3]
     real(r8), pointer, dimension(:,:) :: upwp     ! east-west momentum flux			[m^2/s^2]
@@ -2647,7 +2665,10 @@ end subroutine clubb_init_cnst
     call pbuf_get_field(pbuf, thlp2_idx,   thlp2,   start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
     call pbuf_get_field(pbuf, up2_idx,     up2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
     call pbuf_get_field(pbuf, vp2_idx,     vp2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
-
+! BAS
+    call pbuf_get_field(pbuf, up2_zt_idx,     up2_zt,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
+    call pbuf_get_field(pbuf, vp2_zt_idx,     vp2_zt,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
+! BAS
     call pbuf_get_field(pbuf, rtp3_idx,    rtp3,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
     call pbuf_get_field(pbuf, thlp3_idx,   thlp3,   start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
     call pbuf_get_field(pbuf, up3_idx,     up3,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
@@ -3893,6 +3914,16 @@ end subroutine clubb_init_cnst
     rtp2_zt = zm2zt_api( nzm_clubb, ncol, gr, rtp2_in )
     thl2_zt = zm2zt_api( nzm_clubb, ncol, gr, thlp2_in )
     wp2_zt  = zm2zt_api( nzm_clubb, ncol, gr, wp2_in )
+! BAS
+    up2_zt_out  = zm2zt_api( nzm_clubb, ncol, gr, up2_in )
+    vp2_zt_out  = zm2zt_api( nzm_clubb, ncol, gr, vp2_in )
+!    do k=1,nzm_clubb
+!      do i=1, ncol
+!        up2_zt_out(i,k)   = max(w_tol_sqd, up2_zt_out(i,k))
+!        vp2_zt_out(i,k)   = max(w_tol_sqd, vp2_zt_out(i,k))
+!      end do
+!    end do
+! BAS
 
     call t_startf('clubb_tend_cam:flip-index')
 
@@ -3953,9 +3984,28 @@ end subroutine clubb_init_cnst
         rtp2_zt_out(i,pverp-k+1)  = rtp2_zt(i,k)
         thl2_zt_out(i,pverp-k+1)  = thl2_zt(i,k)
         wp2_zt_out(i,pverp-k+1)   = wp2_zt(i,k)
-
+! BAS
+        up2_zt(i,pverp-k+1)       = up2_zt_out(i,k)
+        vp2_zt(i,pverp-k+1)       = vp2_zt_out(i,k)
+! BAS
       end do
     end do
+
+!   do i =1, ncol
+!     if (wp2_zt_out(i,pverp)<-1.e-6_r8) then
+!       write(*,*) "wp2_zt_out = ",wp2_zt_out(i,pverp)
+!     end if
+!   end do
+! BAS
+!    write(*,*) "clubb intr up2 = ",up2(:,pverp)
+!    write(*,*) "clubb intr vp2 = ",vp2(:,pverp)
+!   if (180*state%lat(1)/3.14 < 24 .and. 180*state%lat(1)/3.14 > 22 .and. 180*state%lon(1)/3.14 > 204 .and. 180*state%lon(1)/3.14 < 206 ) then
+    write(*,*) "clubb intr up2 zt = ",up2_zt(:,pver)
+    write(*,*) "clubb intr vp2 zt = ",vp2_zt(:,pver)
+!   end if
+! BAS
+
+   write(*,*) "lat, lon = ", 180*state%lat(1)/3.14, 180*state%lon(1)/3.14
 
     if ( edsclr_dim > 0 ) then
       !$acc parallel loop gang vector collapse(3) default(present)

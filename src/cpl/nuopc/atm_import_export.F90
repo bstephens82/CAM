@@ -149,6 +149,10 @@ contains
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_z'          )
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_u'          )
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_v'          )
+ ! --- BAS
+    call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_up2_sfc'    )
+    call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_vp2_sfc'    )
+ ! --- BAS
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_tbot'       )
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_ptem'       )
     call fldlist_add(fldsFrAtm_num, fldsFrAtm, 'Sa_shum'       )
@@ -935,6 +939,9 @@ contains
     real(r8), pointer :: fldptr_lwdn(:)    , fldptr_swnet(:)
     real(r8), pointer :: fldptr_topo(:)    , fldptr_zbot(:)
     real(r8), pointer :: fldptr_ubot(:)    , fldptr_vbot(:)
+  ! --- BAS
+    real(r8), pointer :: fldptr_up2_sfc(:)    , fldptr_vp2_sfc(:)
+  ! --- BAS
     real(r8), pointer :: fldptr_pbot(:)    , fldptr_tbot(:)
     real(r8), pointer :: fldptr_shum(:)    , fldptr_dens(:)
     real(r8), pointer :: fldptr_ptem(:)    , fldptr_pslv(:)
@@ -959,6 +966,12 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call state_getfldptr(exportState, 'Sa_v'   , fldptr=fldptr_vbot, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
+ ! --- BAS
+    call state_getfldptr(exportState, 'Sa_up2_sfc'   , fldptr=fldptr_up2_sfc, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    call state_getfldptr(exportState, 'Sa_vp2_sfc'   , fldptr=fldptr_vp2_sfc, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+ ! --- BAS
     call state_getfldptr(exportState, 'Sa_tbot', fldptr=fldptr_tbot, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call state_getfldptr(exportState, 'Sa_pbot', fldptr=fldptr_pbot, rc=rc)
@@ -978,6 +991,10 @@ contains
           fldptr_zbot(g) = cam_out(c)%zbot(i)
           fldptr_ubot(g) = cam_out(c)%ubot(i)
           fldptr_vbot(g) = cam_out(c)%vbot(i)
+  ! --- BAS
+          fldptr_up2_sfc(g) = cam_out(c)%up2_sfc(i)
+          fldptr_vp2_sfc(g) = cam_out(c)%vp2_sfc(i)
+  ! --- BAS
           fldptr_pbot(g) = cam_out(c)%pbot(i)
           fldptr_tbot(g) = cam_out(c)%tbot(i)
           fldptr_shum(g) = cam_out(c)%qbot(i,1)
@@ -986,6 +1003,8 @@ contains
           fldptr_pslv(g) = cam_out(c)%psl(i)
           g = g + 1
        end do
+      write(*,*) "imp exp up2_sfc = ", c, cam_out(c)%up2_sfc(:)
+      write(*,*) "imp exp vp2_sfc = ", c, cam_out(c)%vp2_sfc(:)
     end do
 
     ! required export flux variables

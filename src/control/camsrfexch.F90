@@ -42,6 +42,8 @@ module camsrfexch
      real(r8) :: topo(pcols)         ! surface topographic height (m)
      real(r8) :: ubot(pcols)         ! bot level u wind
      real(r8) :: vbot(pcols)         ! bot level v wind
+     real(r8) :: up2_sfc(pcols)
+     real(r8) :: vp2_sfc(pcols)
      real(r8) :: qbot(pcols,pcnst)   ! bot level specific humidity
      real(r8) :: pbot(pcols)         ! bot level pressure
      real(r8) :: rho(pcols)          ! bot level density
@@ -407,13 +409,15 @@ subroutine cam_export(state,cam_out,pbuf)
    ! Transfer atmospheric fields into necessary surface data structures
 
    use physics_types,    only: physics_state
-   use ppgrid,           only: pver
+   use ppgrid,           only: pver, pverp
    use cam_history,      only: outfld
    use chem_surfvals,    only: chem_surfvals_get
    use co2_cycle,        only: co2_transport, c_i
    use physconst,        only: rair, mwdry, mwco2, gravit, mwo3
    use constituents,     only: pcnst
-   use physics_buffer,   only: pbuf_get_index, pbuf_get_field, physics_buffer_desc
+! --- BAS
+   use physics_buffer,   only: pbuf_old_tim_idx, pbuf_get_index, pbuf_get_field, physics_buffer_desc
+! --- BAS
    use rad_constituents, only: rad_cnst_get_gas
    use cam_control_mod,  only: simple_phys
 
@@ -425,7 +429,9 @@ subroutine cam_export(state,cam_out,pbuf)
    type(physics_buffer_desc), pointer  :: pbuf(:)
 
    ! Local variables
-
+! --- BAS
+   integer :: itim_old
+! --- BAS
    integer :: i              ! Longitude index
    integer :: m              ! constituent index
    integer :: lchnk          ! Chunk index
@@ -433,6 +439,9 @@ subroutine cam_export(state,cam_out,pbuf)
    integer :: psl_idx
    integer :: prec_dp_idx, snow_dp_idx, prec_sh_idx, snow_sh_idx
    integer :: prec_sed_idx,snow_sed_idx,prec_pcw_idx,snow_pcw_idx
+  ! --- BAS
+   integer :: up2_idx, vp2_idx
+  ! --- BAS
    integer :: srf_ozone_idx, lightning_idx
 
    real(r8), pointer :: psl(:)
@@ -447,6 +456,12 @@ subroutine cam_export(state,cam_out,pbuf)
    real(r8), pointer :: snow_pcw(:)                ! snow from Hack   convection
    real(r8), pointer :: o3_ptr(:,:), srf_o3_ptr(:)
    real(r8), pointer :: lightning_ptr(:)
+  ! --- BAS
+   real(r8), pointer :: up2(:,:)
+   real(r8), pointer :: vp2(:,:)
+
+   itim_old = pbuf_old_tim_idx()
+  ! --- BAS
    !-----------------------------------------------------------------------
 
    lchnk = state%lchnk
@@ -465,6 +480,12 @@ subroutine cam_export(state,cam_out,pbuf)
    snow_pcw_idx = pbuf_get_index('SNOW_PCW', errcode=i)
    srf_ozone_idx = pbuf_get_index('SRFOZONE', errcode=i)
    lightning_idx = pbuf_get_index('LGHT_FLASH_FREQ', errcode=i)
+ ! --- BAS
+!   up2_idx = pbuf_get_index('UP2_nadv', errcode=i)
+!   vp2_idx = pbuf_get_index('VP2_nadv', errcode=i)
+   up2_idx = pbuf_get_index('UP2_ZT', errcode=i)
+   vp2_idx = pbuf_get_index('VP2_ZT', errcode=i)
+ ! --- BAS
 
    if (prec_dp_idx > 0) then
      call pbuf_get_field(pbuf, prec_dp_idx, prec_dp)
@@ -490,6 +511,20 @@ subroutine cam_export(state,cam_out,pbuf)
    if (snow_pcw_idx > 0) then
      call pbuf_get_field(pbuf, snow_pcw_idx, snow_pcw)
    end if
+ ! --- BAS
+   if (up2_idx > 0) then
+    call pbuf_get_field(pbuf, up2_idx,     up2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
+   end if
+   if (vp2_idx > 0) then
+    call pbuf_get_field(pbuf, vp2_idx,     vp2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
+   end if
+ ! --- BAS
+
+! BAS
+    write(*,*) "camsrfexch up2 zt = ",up2(:,pver)
+    write(*,*) "camsrfexch vp2 zt = ",vp2(:,pver)
+! BAS
+
 
    do i=1,ncol
       cam_out%tbot(i)  = state%t(i,pver)
@@ -498,6 +533,11 @@ subroutine cam_export(state,cam_out,pbuf)
       cam_out%topo(i)  = state%phis(i) / gravit
       cam_out%ubot(i)  = state%u(i,pver)
       cam_out%vbot(i)  = state%v(i,pver)
+   ! --- BAS
+      cam_out%up2_sfc(i) = up2(i,pver)
+      cam_out%vp2_sfc(i) = vp2(i,pver)
+!   write(*,*) "cam_out% = ",i,cam_out%up2_sfc(i),cam_out%vp2_sfc(i)
+   ! --- BAS
       cam_out%pbot(i)  = state%pmid(i,pver)
       cam_out%psl(i)   = psl(i)
       cam_out%rho(i)   = cam_out%pbot(i)/(rair*cam_out%tbot(i))
