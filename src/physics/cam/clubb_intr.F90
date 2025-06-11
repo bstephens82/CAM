@@ -3991,22 +3991,6 @@ end subroutine clubb_init_cnst
       end do
     end do
 
-!   do i =1, ncol
-!     if (wp2_zt_out(i,pverp)<-1.e-6_r8) then
-!       write(*,*) "wp2_zt_out = ",wp2_zt_out(i,pverp)
-!     end if
-!   end do
-! BAS
-!    write(*,*) "clubb intr up2 = ",up2(:,pverp)
-!    write(*,*) "clubb intr vp2 = ",vp2(:,pverp)
-!   if (180*state%lat(1)/3.14 < 24 .and. 180*state%lat(1)/3.14 > 22 .and. 180*state%lon(1)/3.14 > 204 .and. 180*state%lon(1)/3.14 < 206 ) then
-    write(*,*) "clubb intr up2 zt = ",up2_zt(:,pver)
-    write(*,*) "clubb intr vp2 zt = ",vp2_zt(:,pver)
-!   end if
-! BAS
-
-   write(*,*) "lat, lon = ", 180*state%lat(1)/3.14, 180*state%lon(1)/3.14
-
     if ( edsclr_dim > 0 ) then
       !$acc parallel loop gang vector collapse(3) default(present)
       do ixind=1,edsclr_dim

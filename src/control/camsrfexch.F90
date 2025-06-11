@@ -520,12 +520,6 @@ subroutine cam_export(state,cam_out,pbuf)
    end if
  ! --- BAS
 
-! BAS
-    write(*,*) "camsrfexch up2 zt = ",up2(:,pver)
-    write(*,*) "camsrfexch vp2 zt = ",vp2(:,pver)
-! BAS
-
-
    do i=1,ncol
       cam_out%tbot(i)  = state%t(i,pver)
       cam_out%thbot(i) = state%t(i,pver) * state%exner(i,pver)
@@ -536,7 +530,6 @@ subroutine cam_export(state,cam_out,pbuf)
    ! --- BAS
       cam_out%up2_sfc(i) = up2(i,pver)
       cam_out%vp2_sfc(i) = vp2(i,pver)
-!   write(*,*) "cam_out% = ",i,cam_out%up2_sfc(i),cam_out%vp2_sfc(i)
    ! --- BAS
       cam_out%pbot(i)  = state%pmid(i,pver)
       cam_out%psl(i)   = psl(i)

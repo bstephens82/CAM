@@ -362,20 +362,10 @@ contains
              end if
 
              ! --- BAS
-!             if (n==5) then
-              write(*,*) "shr flux up2_sfc = ",up2_sfc(:)
-              write(*,*) "shr flux vp2_sfc = ",vp2_sfc(:)
-!              write(*,*) "ugust_out b4 = ",n,ugust_out(n)
-!             end if
-
              if (add_clubb_gusts) then
                 vmag   = sqrt(vmag**2 + up2_sfc(n) + vp2_sfc(n) )
                 ugust_out(n) = sqrt( ugust_out(n)**2 + up2_sfc(n) + vp2_sfc(n) )
              end if
-
-!             if (n==5) then
-!              write(*,*) "ugust_out after = ",n,ugust_out(n)
-!             end if
              ! --- end BAS ---
 
              wind0 = max(seq_flux_atmocn_minwind, sqrt( (ubot(n)-us(n))**2 + (vbot(n)-vs(n))**2) )

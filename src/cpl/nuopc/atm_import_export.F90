@@ -1003,8 +1003,6 @@ contains
           fldptr_pslv(g) = cam_out(c)%psl(i)
           g = g + 1
        end do
-      write(*,*) "imp exp up2_sfc = ", c, cam_out(c)%up2_sfc(:)
-      write(*,*) "imp exp vp2_sfc = ", c, cam_out(c)%vp2_sfc(:)
     end do
 
     ! required export flux variables
