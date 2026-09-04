@@ -37,15 +37,13 @@ module clubb_intr
                                  hm_metadata_type, sclr_idx_type, &
                                  nparams
 
-  use clubb_mf,            only: do_clubb_mf, do_clubb_mf_diag
+  use clubb_mf,            only: do_clubb_mf, do_clubb_mf_diag, clubb_mf_nup, &
+                                 clubb_mf_up_ndt, clubb_mf_cp_ndt
+  use cam_history_support, only: add_hist_coord
   use cloud_fraction,      only: dp1, dp2
 #endif
 
   implicit none
-
-#ifdef CLUBB_SGS
-
-#endif
 
   private
 
@@ -448,6 +446,7 @@ module clubb_intr
     pblh_idx, &         ! PBL pbuf
     icwmrdp_idx, &	    ! In cloud mixing ratio for deep convection
     tke_idx, &          ! turbulent kinetic energy
+    icwmrsh_idx, &      ! In cloud mixing ratio for shallow convection (MF)
     tpert_idx, &        ! temperature perturbation from PBL
     fice_idx, &         ! fice_idx index in physics buffer
     cmeliq_idx, &       ! cmeliq_idx index in physics buffer
@@ -492,6 +491,20 @@ module clubb_intr
   integer :: &
     cmfmc_sh_idx = 0
 
+  integer :: &
+    prec_sh_idx, &
+    snow_sh_idx
+
+  integer ::           &
+    ztopmn_idx,        &
+    ztopma_idx,        &
+    ztopm1_macmic_idx, &
+    ddcp_idx,          &
+    ddcp_macmic_idx,   &
+    ddcpmn_idx,        &
+    cbm1_idx,          &
+    cbm1_macmic_idx
+
   contains
 
   ! =============================================================================== !
@@ -516,12 +529,15 @@ module clubb_intr
     use physics_buffer,  only: pbuf_add_field, dtype_r8, dtype_i4, dyn_time_lvls
     use subcol_utils,    only: subcol_get_scheme
 
+    integer :: cld_macmic_num_steps
+
     !----- Begin Code -----
     call phys_getopts( eddy_scheme_out                 = eddy_scheme, &
                        deep_scheme_out                 = deep_scheme, &
                        history_budget_out              = history_budget, &
                        history_budget_histfile_num_out = history_budget_histfile_num, &
-                       do_hb_above_clubb_out           = do_hb_above_clubb)
+                       do_hb_above_clubb_out           = do_hb_above_clubb, &
+                       cld_macmic_num_steps_out        = cld_macmic_num_steps)
 
     subcol_scheme = subcol_get_scheme()
 
@@ -563,9 +579,9 @@ module clubb_intr
     call pbuf_add_field('QLST',       'global', dtype_r8, (/pcols,pver,dyn_time_lvls/),   qlst_idx)
     call pbuf_add_field('CONCLD',     'global', dtype_r8, (/pcols,pver,dyn_time_lvls/),   concld_idx)
     call pbuf_add_field('CLD',        'global', dtype_r8, (/pcols,pver,dyn_time_lvls/),   cld_idx)
-    call pbuf_add_field('FICE',       'physpkg',dtype_r8, (/pcols,pver/),                 fice_idx)
-    call pbuf_add_field('CMELIQ',     'physpkg',dtype_r8, (/pcols,pver/),                 cmeliq_idx)
-    call pbuf_add_field('QSATFAC',    'physpkg',dtype_r8, (/pcols,pver/),                 qsatfac_idx)
+    call pbuf_add_field('FICE',       'global', dtype_r8, (/pcols,pver/),                 fice_idx)
+    call pbuf_add_field('CMELIQ',     'global', dtype_r8, (/pcols,pver/),                 cmeliq_idx)
+    call pbuf_add_field('QSATFAC',    'global', dtype_r8, (/pcols,pver/),                 qsatfac_idx)
 
     ! pbuf fields for Gravity Wave scheme
     call pbuf_add_field('TTEND_CLUBB',     'physpkg', dtype_r8, (/pcols,pver /), ttend_clubb_idx )
@@ -633,6 +649,20 @@ module clubb_intr
 
     ! Only in clubb_intr.F90 or SILHS
     call pbuf_add_field('ISS_FRAC',   'global', dtype_r8, (/pcols,nzt_clubb/), ice_supersat_idx)
+
+    if (do_clubb_mf) then
+      ! note that the extra coord dim doesn't seem to work for interpolate_output=.true.
+      call add_hist_coord('nens', clubb_mf_nup, 'clubb+mf ensemble size')
+
+      call pbuf_add_field('ZTOPMN'             ,'global' ,  dtype_r8, (/clubb_mf_up_ndt,pcols,clubb_mf_nup/), ztopmn_idx)
+      call pbuf_add_field('ZTOPMA'             ,'global' ,  dtype_r8, (/pcols,clubb_mf_nup/), ztopma_idx)
+      call pbuf_add_field('ZTOP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols,clubb_mf_nup/), ztopm1_macmic_idx)
+      call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols,clubb_mf_nup/), ddcp_idx)
+      call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols,clubb_mf_nup/), ddcp_macmic_idx)
+      call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols,clubb_mf_nup/), ddcpmn_idx)
+      call pbuf_add_field('CBM1'               ,'global' ,  dtype_r8, (/pcols/), cbm1_idx)
+      call pbuf_add_field('CBM1_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), cbm1_macmic_idx)
+    end if
 
 #endif
 
@@ -1515,6 +1545,7 @@ end subroutine clubb_init_cnst
     qist_idx            = pbuf_get_index('QIST')        ! Physical in-stratus IWC
     dp_frac_idx         = pbuf_get_index('DP_FRAC')     ! Deep convection cloud fraction
     icwmrdp_idx         = pbuf_get_index('ICWMRDP')     ! In-cloud deep convective mixing ratio
+    icwmrsh_idx         = pbuf_get_index('ICWMRSH')     ! In-cloud shallow convective mixing ratio (EDMF)
     sh_frac_idx         = pbuf_get_index('SH_FRAC')     ! Shallow convection cloud fraction
     relvar_idx          = pbuf_get_index('RELVAR')      ! Relative cloud water variance
     prer_evap_idx       = pbuf_get_index('PRER_EVAP')
@@ -1522,6 +1553,10 @@ end subroutine clubb_init_cnst
     cmfmc_sh_idx        = pbuf_get_index('CMFMC_SH')
     naai_idx            = pbuf_get_index('NAAI')
     npccn_idx           = pbuf_get_index('NPCCN')
+
+    ! CLUBB+MF
+    prec_sh_idx  = pbuf_get_index('PREC_SH')
+    snow_sh_idx  = pbuf_get_index('SNOW_SH')
 
     ! ----------------------------------------------------------------- !
     ! Add output fields for the history files
@@ -1536,8 +1571,8 @@ end subroutine clubb_init_cnst
     call addfld ('UPWP_CLUBB',       (/ 'ilev' /), 'A', 'm2/s2',     'Zonal Momentum Flux',                            sampled_on_subcycle = .true. )
     call addfld ('VPWP_CLUBB',       (/ 'ilev' /), 'A', 'm2/s2',     'Meridional Momentum Flux',                       sampled_on_subcycle = .true. )
     call addfld ('WP3_CLUBB',        (/ 'lev' /),  'A', 'm3/s3',     'Third Moment Vertical Velocity',                 sampled_on_subcycle = .true. )
-    call addfld ('WPTHLP_CLUBB',     (/ 'ilev' /), 'A', 'W/m2',      'Heat Flux',                                      sampled_on_subcycle = .true. )
-    call addfld ('WPRTP_CLUBB',      (/ 'ilev' /), 'A', 'W/m2',      'Moisture Flux',                                  sampled_on_subcycle = .true. )
+    call addfld ('WPTHLP_CLUBB',     (/ 'ilev' /), 'A', 'K m/s',     'Heat Flux',                                      sampled_on_subcycle = .true. )
+    call addfld ('WPRTP_CLUBB',      (/ 'ilev' /), 'A', 'kg/kg m/s', 'Moisture Flux',                                  sampled_on_subcycle = .true. )
     call addfld ('RTP2_CLUBB',       (/ 'ilev' /), 'A', 'kg^2/kg^2', 'Moisture Variance',                              sampled_on_subcycle = .true. )
     call addfld ('RTP2_ZT_CLUBB',    (/ 'lev' /),  'A', 'kg^2/kg^2', 'Moisture Variance on zt grid',                   sampled_on_subcycle = .true. )
     call addfld ('THLP2_CLUBB',      (/ 'ilev' /), 'A', 'K^2',       'Temperature Variance',                           sampled_on_subcycle = .true. )
@@ -1546,11 +1581,11 @@ end subroutine clubb_init_cnst
     call addfld ('RCM_CLUBB',        (/ 'lev' /),  'A', 'kg/kg',     'Cloud Water Mixing Ratio',                       sampled_on_subcycle = .true. )
     call addfld ('RTM_CLUBB',        (/ 'lev' /),  'A', 'kg/kg',     'Total Water Mixing Ratio',                       sampled_on_subcycle = .true. )
     call addfld ('THLM_CLUBB',       (/ 'lev' /),  'A', 'K',         'Liquid Water Potential Temperature',             sampled_on_subcycle = .true. )
-    call addfld ('WPRCP_CLUBB',      (/ 'ilev' /), 'A', 'W/m2',      'Liquid Water Flux',                              sampled_on_subcycle = .true. )
+    call addfld ('WPRCP_CLUBB',      (/ 'ilev' /), 'A', 'kg/kg m/s', 'Liquid Water Flux',                              sampled_on_subcycle = .true. )
     call addfld ('CLOUDFRAC_CLUBB',  (/ 'lev' /),  'A', 'fraction',  'Cloud Fraction',                                 sampled_on_subcycle = .true. )
     call addfld ('RCMINLAYER_CLUBB', (/ 'lev' /),  'A', 'kg/kg',     'Cloud Water in Layer',                           sampled_on_subcycle = .true. )
     call addfld ('CLOUDCOVER_CLUBB', (/ 'lev' /),  'A', 'fraction',  'Cloud Cover',                                    sampled_on_subcycle = .true. )
-    call addfld ('WPTHVP_CLUBB',     (/ 'ilev' /), 'A', 'W/m2',      'Buoyancy Flux',                                  sampled_on_subcycle = .true. )
+    call addfld ('WPTHVP_CLUBB',     (/ 'ilev' /), 'A', 'K m/s',      'Buoyancy Flux',                                  sampled_on_subcycle = .true. )
     call addfld ('RVMTEND_CLUBB',    (/ 'lev' /),  'A', 'kg/kg /s',  'Water vapor tendency',                           sampled_on_subcycle = .true. )
     call addfld ('STEND_CLUBB',      (/ 'lev' /),  'A', 'J/(kg s)',  'Static energy tendency',                         sampled_on_subcycle = .true. )
     call addfld ('RCMTEND_CLUBB',    (/ 'lev' /),  'A', 'kg/kg /s',  'Cloud Liquid Water Tendency',                    sampled_on_subcycle = .true. )
@@ -1610,14 +1645,49 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_DRY_V'    , (/ 'ilev' /), 'A', 'm/s'     , 'Dry updraft meridional velocity (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_MOIST_V'  , (/ 'ilev' /), 'A', 'm/s'     , 'Moist updraft meridional velocity (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_MOIST_QC' , (/ 'ilev' /), 'A', 'kg/kg'   , 'Moist updraft condensate mixing ratio (EDMF)', sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_precc'    , (/ 'ilev' /), 'A', 'm/s'     , 'Moist updraft precipitation rate (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_S_AE'     , (/ 'ilev' /), 'A', 'fraction', '1 minus sum of a_i*w_i (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_S_AW'     , (/ 'ilev' /), 'A', 'm/s'     , 'Sum of a_i*w_i (EDMF)', sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_S_AWW'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*w_i (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_S_AWTHL'  , (/ 'ilev' /), 'A', 'K m/s'   , 'Sum of a_i*w_i*thl_i (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_S_AWQT'   , (/ 'ilev' /), 'A', 'kgm/kgs' , 'Sum of a_i*w_i*q_ti (EDMF)', sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_S_AWTH'   , (/ 'ilev' /), 'A', 'K m/s'   , 'Sum of a_i*w_i*th_i (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_S_AWQV'   , (/ 'ilev' /), 'A', 'kgm/kgs' , 'Sum of a_i*w_i*q_vi (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_S_AWU'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*u_i (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_S_AWV'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*v_i (EDMF)', sampled_on_subcycle=.true.)
-      call addfld ( 'edmf_thlflx'   , (/ 'ilev' /), 'A', 'W/m2'    , 'thl flux (EDMF)', sampled_on_subcycle=.true.)
-      call addfld ( 'edmf_qtflx'    , (/ 'ilev' /), 'A', 'W/m2'    , 'qt flux (EDMF)', sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_qtforc'   , (/ 'lev ' /),  'A', 'kg/kg/s' , 'qt forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thlflxdn' , (/ 'ilev' /), 'A', 'K m/s'    , 'thl downdraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_qtflxdn'  , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt downdraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thlflx'   , (/ 'ilev' /), 'A', 'K m/s'    , 'thl flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_qtflx'    , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_vflxdn'   , (/ 'ilev' /), 'A', 'm2/s2'    , 'v downdraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_uflx'     , (/ 'ilev' /), 'A', 'm2/s2'    , 'u flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_vflx'     , (/ 'ilev' /), 'A', 'm2/s2'    , 'v flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_sqtup'    , (/ 'lev ' /), 'A', 'kg/kg/s' , 'Plume updraft microphysics tendency (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_sqtdn'    , (/ 'lev ' /), 'A', 'kg/kg/s' , 'Plume downdraft microphysics tendency (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_rcm'      , (/ 'ilev' /), 'A', 'kg/kg'   , 'grid mean cloud (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_cloudfrac', (/ 'lev ' /),  'A', 'fraction', 'grid mean cloud fraction (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_ent'      , (/ 'lev ' /),  'A', '1/m'     , 'ensemble mean entrainment (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_ztop'     ,  horiz_only,  'A', 'm'       , 'edmf ztop',       flag_xyfill=.True., sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_ddcp'     ,  horiz_only,  'A', 'm/s'     , 'edmf ddcp',       flag_xyfill=.True., sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_L0'       ,  horiz_only,  'A', 'm'       , 'edmf dynamic L0', flag_xyfill=.True., sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_freq'       ,  horiz_only,  'A', 'unitless', 'edmf frequency mf is active', flag_xyfill=.True., sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_cfl'      ,  horiz_only,  'A', 'unitless', 'max flux cfl number (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_cape'     ,  horiz_only,  'A', 'J/kg'    , 'ensemble mean CAPE (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upa'      , (/ 'ilev', 'nens' /), 'A', 'fraction', 'Plume updraft area fraction (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upw'      , (/ 'ilev', 'nens' /), 'A', 'm/s'     , 'Plume updraft vertical velocity (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upmf'     , (/ 'ilev', 'nens' /), 'A', 'kg/m2/s' , 'Plume updraft mass flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upqt'     , (/ 'ilev', 'nens' /), 'A', 'kg/kg'   , 'Plume updraft total water mixing ratio (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upthl'    , (/ 'ilev', 'nens' /), 'A', 'K'       , 'Plume updraft liquid potential temperature (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upthv'    , (/ 'ilev', 'nens' /), 'A', 'K'     , 'Plume updraft virtual potential temperature (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upth'     , (/ 'ilev', 'nens' /), 'A', 'K'     , 'Plume updraft potential temperature (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upqc'     , (/ 'ilev', 'nens' /), 'A', 'kg/kg'   , 'Plume updraft condensate mixing ratio (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upent'    , (/ 'ilev', 'nens' /), 'A', '1/m'     , 'Plume updraft entrainment rate (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_updet'    , (/ 'ilev', 'nens' /), 'A', '1/m'     , 'Plume updraft dettrainment rate (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_upbuoy'   , (/  'ilev', 'nens' /), 'A', 'm/s2'   , 'Plume updraft buoyancy (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_dnw'      , (/ 'ilev', 'nens' /), 'A', 'm/s'     , 'Plume downdraft vertical velocity (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_dnthl'    , (/ 'ilev', 'nens' /), 'A', 'K'       , 'Plume downdraft liquid potential temperature (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_dnqt'     , (/ 'ilev', 'nens' /), 'A', 'kg/kg'   , 'Plume downdraft total water mixing ratio (EDMF)', sampled_on_subcycle=.true. )
     end if
 
     ! ----------------------------------------------------------------- !
@@ -1683,14 +1753,47 @@ end subroutine clubb_init_cnst
        call add_default( 'edmf_DRY_V'    , 1, ' ')
        call add_default( 'edmf_MOIST_V'  , 1, ' ')
        call add_default( 'edmf_MOIST_QC' , 1, ' ')
+       call add_default( 'edmf_precc'    , 1, ' ')
        call add_default( 'edmf_S_AE'     , 1, ' ')
        call add_default( 'edmf_S_AW'     , 1, ' ')
+       call add_default( 'edmf_S_AWW'    , 1, ' ')
+       call add_default( 'edmf_S_AWTH'   , 1, ' ')
        call add_default( 'edmf_S_AWTHL'  , 1, ' ')
        call add_default( 'edmf_S_AWQT'   , 1, ' ')
        call add_default( 'edmf_S_AWU'    , 1, ' ')
        call add_default( 'edmf_S_AWV'    , 1, ' ')
+       call add_default( 'edmf_thlflxup' , 1, ' ')
+       call add_default( 'edmf_qtflxup'  , 1, ' ')
+       call add_default( 'edmf_thlflxdn' , 1, ' ')
+       call add_default( 'edmf_qtflxdn'  , 1, ' ')
        call add_default( 'edmf_thlflx'   , 1, ' ')
+       call add_default( 'edmf_thvflx'   , 1, ' ')
+       call add_default( 'edmf_uflxup'   , 1, ' ')
+       call add_default( 'edmf_vflxup'   , 1, ' ')
+       call add_default( 'edmf_uflxdn'   , 1, ' ')
+       call add_default( 'edmf_vflxdn'   , 1, ' ')
+       call add_default( 'edmf_uflx'     , 1, ' ')
+       call add_default( 'edmf_vflx'     , 1, ' ')
        call add_default( 'edmf_qtflx'    , 1, ' ')
+
+       call add_default( 'edmf_thlforcup', 1, ' ')
+       call add_default( 'edmf_qtforcup' , 1, ' ')
+       call add_default( 'edmf_thlforcdn', 1, ' ')
+       call add_default( 'edmf_qtforcdn' , 1, ' ')
+
+       call add_default( 'edmf_thlforc'  , 1, ' ')
+       call add_default( 'edmf_qtforc'   , 1, ' ')
+       call add_default( 'edmf_sqtup'    , 1, ' ')
+       call add_default( 'edmf_sqtdn'    , 1, ' ')
+       call add_default( 'edmf_rcm'      , 1, ' ')
+       call add_default( 'edmf_cloudfrac', 1, ' ')
+       call add_default( 'edmf_ent'      , 1, ' ')
+       call add_default( 'edmf_ztop'     , 1, ' ')
+       call add_default( 'edmf_ddcp'     , 1, ' ')
+       call add_default( 'edmf_L0'       , 1, ' ')
+       call add_default( 'edmf_freq'       , 1, ' ')
+       call add_default( 'edmf_cape'     , 1, ' ')
+       call add_default( 'edmf_cfl'     , 1, ' ')
     end if
 
     if (history_budget) then
@@ -1748,6 +1851,17 @@ end subroutine clubb_init_cnst
        call pbuf_set_field(pbuf_ini, wp2up2_idx,        0.0_r8)
        call pbuf_set_field(pbuf_ini, wp2vp2_idx,        0.0_r8)
        call pbuf_set_field(pbuf_ini, ice_supersat_idx,  0.0_r8)
+
+       if (do_clubb_mf) then
+         call pbuf_set_field(pbuf_ini, ztopmn_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, ztopma_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, ztopm1_macmic_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, ddcp_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, ddcp_macmic_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, ddcpmn_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, cbm1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf_ini, cbm1_macmic_idx, 0.0_r8)
+       end if
 
        ! Initialize SILHS covariance contributions
        call pbuf_set_field(pbuf_ini, rtp2_mc_zt_idx,    0.0_r8)
@@ -1899,6 +2013,9 @@ end subroutine clubb_init_cnst
     use time_manager,   only: get_nstep, is_first_restart_step, get_curr_calday, get_calday
     use perf_mod,       only: t_startf, t_stopf
 
+    use wv_saturation,   only: qsat
+    use interpolate_data,only: vertinterp
+
 #ifdef CLUBB_SGS
     use spmd_utils, only: iam
     use clubb_api_module, only: &
@@ -2003,6 +2120,7 @@ end subroutine clubb_init_cnst
     real(r8), pointer, dimension(:)   :: pblh_pbuf                  ! planetary boundary layer height                [m]
     real(r8), pointer, dimension(:,:) :: tke_pbuf                   ! turbulent kinetic energy                     [m^2/s^2]
     real(r8), pointer, dimension(:,:) :: dp_icwmr_pbuf              ! deep convection in cloud mixing ratio        [kg/kg]
+    real(r8), pointer, dimension(:,:) :: sh_icwmr_pbuf              ! shallow convection (EDMF) in cloud mixing ratio [kg/kg]
     real(r8), pointer, dimension(:,:) :: ice_supersat_frac_pbuf     ! Cloud fraction of ice clouds (pver)[fraction]
     real(r8), pointer, dimension(:,:) :: relvar_pbuf                ! relative cloud water variance                [-]
     real(r8), pointer, dimension(:,:) :: naai_pbuf
@@ -2034,13 +2152,29 @@ end subroutine clubb_init_cnst
     real(r8), pointer, dimension(:,:) :: thlp2_clubb_gw_mc_pbuf
     real(r8), pointer, dimension(:,:) :: wpthlp_clubb_gw_mc_pbuf
 
+    ! CLUBB-MF pointers
+    real(r8),pointer :: prec_sh_pbuf(:)   ! total precipitation from MF
+    real(r8),pointer :: snow_sh_pbuf(:)   ! snow from MF
+
+    real(r8), pointer :: ztopmn(:,:,:)
+    real(r8), pointer :: ztopma(:,:)
+    real(r8), pointer :: ztopm1_macmic(:,:)
+    real(r8), pointer :: ddcp(:,:)
+    real(r8), pointer :: ddcp_macmic(:,:)
+    real(r8), pointer :: ddcpmn(:,:,:)
+
+    real(r8), pointer :: cbm1(:)
+    real(r8), pointer :: cbm1_macmic(:)
+
     ! ---------------------------------------------------- !
     !                   Local Variables                    !
     ! ---------------------------------------------------- !
 
-    integer :: i !Must be delcared outside "CLUBB_SGS" ifdef for det_s and det_ice zero-ing loops
+    integer :: i,l !Must be delcared outside "CLUBB_SGS" ifdef for det_s and det_ice zero-ing loops
 
 #ifdef CLUBB_SGS
+
+    real(r8), pointer                    :: tpert(:)
 
     character(len=*), parameter :: subr='clubb_tend_cam'
 
