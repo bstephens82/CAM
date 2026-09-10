@@ -1655,11 +1655,22 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_S_AWQV'   , (/ 'ilev' /), 'A', 'kgm/kgs' , 'Sum of a_i*w_i*q_vi (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_S_AWU'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*u_i (EDMF)', sampled_on_subcycle=.true.)
       call addfld ( 'edmf_S_AWV'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*v_i (EDMF)', sampled_on_subcycle=.true.)
+      call addfld ( 'edmf_thlforcup', (/ 'lev ' /),  'A', 'K/s'     , 'thl updraft forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_qtforcup' , (/ 'lev ' /),  'A', 'kg/kg/s' , 'qt updraft forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thlforcdn', (/ 'lev ' /),  'A', 'K/s'     , 'thl downdraft forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_qtforcdn' , (/ 'lev ' /),  'A', 'kg/kg/s' , 'qt downdraft forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thlforc'  , (/ 'lev ' /),  'A', 'K/s'     , 'thl forcing (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_qtforc'   , (/ 'lev ' /),  'A', 'kg/kg/s' , 'qt forcing (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thlflxup' , (/ 'ilev' /), 'A', 'K m/s'    , 'thl updraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_qtflxup'  , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt updraft flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_thlflxdn' , (/ 'ilev' /), 'A', 'K m/s'    , 'thl downdraft flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_qtflxdn'  , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt downdraft flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_thlflx'   , (/ 'ilev' /), 'A', 'K m/s'    , 'thl flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_qtflx'    , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_thvflx'   , (/ 'ilev' /), 'A', 'K m/s'    , 'thv flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_uflxup'   , (/ 'ilev' /), 'A', 'm2/s2'    , 'u updraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_vflxup'   , (/ 'ilev' /), 'A', 'm2/s2'    , 'v updraft flux (EDMF)', sampled_on_subcycle=.true. )
+      call addfld ( 'edmf_uflxdn'   , (/ 'ilev' /), 'A', 'm2/s2'    , 'u downdraft flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_vflxdn'   , (/ 'ilev' /), 'A', 'm2/s2'    , 'v downdraft flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_uflx'     , (/ 'ilev' /), 'A', 'm2/s2'    , 'u flux (EDMF)', sampled_on_subcycle=.true. )
       call addfld ( 'edmf_vflx'     , (/ 'ilev' /), 'A', 'm2/s2'    , 'v flux (EDMF)', sampled_on_subcycle=.true. )
@@ -2204,14 +2215,22 @@ end subroutine clubb_init_cnst
       wp2_zt,                         & ! CLUBB W variance on theromo levs              [m^2/s^2]
       cloud_frac,                     & ! CLUBB output of cloud fraction                [fraction]
       rcm_in_layer,                   & ! CLUBB output of in-cloud liq. wat. mix. ratio [kg/kg]
-      zt_g                              ! Thermodynamic grid of CLUBB		      	        [m]
+      zt_g,                           & ! Thermodynamic grid of CLUBB		      	        [m]
+
+      !MF Plume Variables on the thermodynamic grid.
+      mf_thlforcup_nadv, mf_qtforcup_nadv, & !fundamentally represents the volumetric change inside a cell.
+      mf_thlforcdn_nadv, mf_qtforcdn_nadv, & !All forcing variables belong strictly on the
+      mf_thlforc_nadv,   mf_qtforc_nadv,   & !thermodynamic grid (nzt_clubb).
+      mf_sqtup, &
+      mf_sqtdn, &
+      mf_qc_zt,   mf_cloudfrac_zt
 
     real(r8), dimension(state%ncol,nzm_clubb) :: &
       rho_zm,                   & ! Air density on momentum levels                        [kg/m^3]
       wprcp,                    & ! CLUBB output of flux of liquid water                  [kg/kg m/s]
       zi_g,                     & ! Momentum grid of CLUBB		      	                    [m]
 
-      ! MF Plume
+      ! MF Plume variables on momentum levels.
       mf_dry_a,   mf_moist_a,    &
       mf_dry_w,   mf_moist_w,    &
       mf_dry_qt,  mf_moist_qt,   &
@@ -2220,10 +2239,36 @@ end subroutine clubb_init_cnst
       mf_dry_v,   mf_moist_v,    &
                   mf_moist_qc,   &
       s_ae,       s_aw,          &
+      s_aww,                     & 
+      s_awthlup,  s_awqtup,      &
+      s_awuup,    s_awvup,       &
+      s_awthldn,  s_awqtdn,      &
+      s_awudn,    s_awvdn,       &
       s_awthl,    s_awqt,        &
       s_awql,     s_awqi,        &
       s_awu,      s_awv,         &
-      mf_thlflx,  mf_qtflx
+      mf_precc,                  &
+
+      ! MF work arrays (of size NCOL)
+      mf_thlflxup,   mf_qtflxup,   mf_uflxup,   mf_vflxup,  &
+      mf_thlflxdn,   mf_qtflxdn,   mf_uflxdn,   mf_vflxdn,  & 
+      mf_thlflx,     mf_qtflx,     mf_uflx,     mf_vflx,    &
+      mf_thvflx,   &
+      mf_rcm,      &
+      mf_ent_nadv
+
+    real(r8), dimension(state%ncol,nzm_clubb,clubb_mf_nup) ::     &
+      mf_upa,                                                     &
+      mf_upw,    mf_dnw,                                          &
+      mf_upmf,                                                    &
+      mf_upqt,   mf_dnqt,                                         &
+      mf_upthl,  mf_dnthl,                                        &
+      mf_upthv,                                                   &
+      mf_upth,                                                    &
+      mf_upqc,                                                    &
+      mf_upbuoy,                                                  &
+      mf_updet,                                                   &
+      mf_upent
       
     ! Variables used for output (zm)
     real(r8), dimension(pcols,pverp) :: &
@@ -2237,14 +2282,11 @@ end subroutine clubb_init_cnst
       upwp_output,              &
       vpwp_output,              &
       rtp2_output,              &
-      wprcp_clubb_output,       &
-      wpthvp_clubb_output,      &
+      wprcp_output,             &
+      wpthvp_output,            &
       thlp2_output,             &
       dlf_liq_out,              & ! Detrained liquid water from ZM                [kg/kg/s]
       dlf_ice_out,              & ! Detrained ice water from ZM                   [kg/kg/s]
-
-      ! MF outputs to outfld
-      ! NOTE: Arrays of size PCOLS (all possible columns) can be used to access State, PBuf and History Subroutines
       mf_dry_a_output,   mf_moist_a_output,   &
       mf_dry_w_output,   mf_moist_w_output,   &
       mf_dry_qt_output,  mf_moist_qt_output,  &
@@ -2253,10 +2295,46 @@ end subroutine clubb_init_cnst
       mf_dry_v_output,   mf_moist_v_output,   &
                          mf_moist_qc_output,  &
       s_ae_output,       s_aw_output,         &
+      s_awthlup_output,  s_awqtup_output, s_awuup_output, s_awvup_output,        &
+      s_awthldn_output,  s_awqtdn_output, s_awudn_output, s_awvdn_output,        &
       s_awthl_output,    s_awqt_output,       &
       s_awql_output,     s_awqi_output,       &
       s_awu_output,      s_awv_output,        &
-      mf_thlflx_output,  mf_qtflx_output
+      s_aww_output,                                                              &
+      mf_thlflxup_output,mf_qtflxup_output, mf_uflxup_output, mf_vflxup_output,  &
+      mf_thlflxdn_output,mf_qtflxdn_output, mf_uflxdn_output, mf_vflxdn_output,  &
+      mf_thlflx_output,  mf_qtflx_output,   mf_uflx_output,   mf_vflx_output,    &
+      mf_thvflx_output,                                                          &
+      mf_rcm_output,     mf_precc_output
+
+    real(r8), dimension(pcols)           :: &
+      mf_ztop_output,    mf_L0_output,      &
+      mf_cape_output,    mf_cfl_output,     &
+      mf_ddcp_output,    mf_freq_output
+
+    real(r8), dimension(pcols,pver)      :: &
+      mf_thlforcup_output, mf_qtforcup_output,  & ! thermodynamic grid
+      mf_thlforcdn_output, mf_qtforcdn_output,  & ! thermodynamic grid
+      mf_thlforc_output,   mf_qtforc_output,    & ! thermodynamic grid
+      mf_ent_output,                            & ! thermodynamic grid
+      mf_sqtup_output,     mf_sqtdn_output,     & ! thermodynamic grid
+      mf_qc_output,        mf_cloudfrac_output    ! thermodynamic grid
+
+    real(r8), dimension(pcols,pverp*clubb_mf_nup) ::  &
+      mf_upa_output,       &
+      mf_upw_output,       &
+      mf_upmf_output,      &
+      mf_upqt_output,      &
+      mf_upthl_output,     &
+      mf_upthv_output,     &
+      mf_upth_output,      &
+      mf_upqc_output,      &
+      mf_upent_output,     &
+      mf_updet_output,     &
+      mf_upbuoy_output,    &
+      mf_dnw_output,       &
+      mf_dnthl_output,     &
+      mf_dnqt_output
 
     ! Variables used for output (zt)
     real(r8), dimension(pcols,pver) :: &
@@ -2314,11 +2392,17 @@ end subroutine clubb_init_cnst
     integer :: &
       errflg, &
       j, k, t, ixind, n,      & ! Loop variables
-      k_cam, k_clubb, & ! Loop variables
+      k_cam, k_clubb, k_clubb_pver, & ! Loop variables
       ixcldice, ixcldliq, ixnumliq, &
       ixnumice, ixq, &
       itim_old, &
       ncol, lchnk                  ! # of columns, and chunk identifier
+
+    real(r8), dimension(state%ncol,clubb_mf_nup) :: mf_ztop_nadv,   &
+                                                    mf_L0_nadv,     &
+                                                    mf_cape_nadv
+
+    real(r8), dimension(state%ncol)      :: max_cfl_nadv, mf_freq_nadv
 
 #endif
 !BAS for new tropopause calculation but not used yet
@@ -2440,7 +2524,27 @@ end subroutine clubb_init_cnst
     call pbuf_get_field(pbuf, kvh_idx,            khzm_pbuf)
     call pbuf_get_field(pbuf, pblh_idx,           pblh_pbuf)
     call pbuf_get_field(pbuf, icwmrdp_idx,        dp_icwmr_pbuf)
+    call pbuf_get_field(pbuf, icwmrsh_idx,        sh_icwmr_pbuf)
     call pbuf_get_field(pbuf, cmfmc_sh_idx,       cmfmc_sh_pbuf)
+
+    call pbuf_get_field(pbuf, prec_sh_idx, prec_sh_pbuf )
+    call pbuf_get_field(pbuf, snow_sh_idx, snow_sh_pbuf )
+
+    if (do_clubb_mf) then
+       call pbuf_get_field(pbuf, tpert_idx, tpert)
+
+       call pbuf_get_field(pbuf, ztopmn_idx, ztopmn)
+       call pbuf_get_field(pbuf, ztopma_idx, ztopma)
+       call pbuf_get_field(pbuf, ztopm1_macmic_idx, ztopm1_macmic)
+
+       call pbuf_get_field(pbuf, ddcp_idx, ddcp)
+       call pbuf_get_field(pbuf, ddcp_macmic_idx, ddcp_macmic)
+       call pbuf_get_field(pbuf, ddcpmn_idx, ddcpmn)
+
+       call pbuf_get_field(pbuf, cbm1_idx, cbm1)
+       call pbuf_get_field(pbuf, cbm1_macmic_idx, cbm1_macmic)
+
+    end if
 
     ! SILHS covariance contributions
     call pbuf_get_field(pbuf, rtp2_mc_zt_idx,    rtp2_mc_zt_pbuf)
@@ -2521,11 +2625,12 @@ end subroutine clubb_init_cnst
                     wp3_const, cld_macmic_num_steps, clubb_params_single_col, & ! in
                     cpair, cpairv(:,:,lchnk), rair, inv_p0_clubb, rairv(:,:,lchnk), zvir, latvap, latice, & ! in
                     rga, gravit, clubb_rnevap_effic, do_cldcool, do_rainturb, & ! in
-                    do_clubb_mf, l_implemented, grid_type, lq, deep_scheme, & ! in
+                    !do_clubb_mf, 
+                    l_implemented, grid_type, lq, deep_scheme, & ! in
                     state_loc%q, state_loc%t, state_loc%pmid, state_loc%zm, & ! in
-                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, & ! in
+                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, state%ps, & ! in
                     state_loc%pint, state_loc%zi, state_loc%omega, cam_in%wsx, & ! in
-                    cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, & ! in
+                    cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, & ! in
                     sclr_idx, clubb_l_ascending_grid, clubb_do_energyfix, & ! in
                     ixq, ixcldliq, ixcldice, ixrtpthlp, ixwpthlp, & ! in
                     ixwprtp, ixwp3, ixwp2, ixthlp2, ixrtp2, ixup2, ixvp2, & ! in
@@ -2540,6 +2645,7 @@ end subroutine clubb_init_cnst
                     mf_dry_u, mf_moist_u, mf_dry_v, mf_moist_v, mf_moist_qc, & ! inout
                     s_ae, s_aw, s_awthl, s_awqt, s_awql, s_awqi, s_awu, s_awv, & ! inout
                     mf_thlflx, mf_qtflx, & ! inout
+                    ztopm1_macmic, ddcp, ddcp_macmic, cbm1, cbm1_macmic, & ! inout
                     thlm, rtm, um, vm, wm_zt, rcm, rcm_in_layer, & ! inout
                     wp2_pbuf, wp3_pbuf, wpthlp_pbuf, wprtp_pbuf, & ! inout
                     rtpthlp_pbuf, rtp2_pbuf, thlp2_pbuf, rtp3_pbuf, & ! inout
@@ -2561,10 +2667,46 @@ end subroutine clubb_init_cnst
                     stats_zt, stats_zm, stats_sfc, stats_rad_zt, stats_rad_zm, & ! inout
                     out_zt, out_zm, out_sfc, out_radzt, out_radzm, & ! inout
                     invrs_cpairv, clubbtop_pbuf, & ! inout
+                    mf_ztop_nadv, mf_L0_nadv, mf_cape_nadv, max_cfl_nadv, mf_freq_nadv, &
+                    s_aww, s_awthlup, s_awqtup, s_awuup, s_awvup, s_awthldn, &
+                    s_awqtdn, s_awudn, s_awvdn, mf_precc, mf_thlflxup, mf_qtflxup, &
+                    mf_uflxup, mf_vflxup, mf_thlflxdn, mf_qtflxdn, mf_uflxdn, mf_vflxdn, &
+                    mf_uflx, mf_vflx, mf_thvflx, mf_rcm, mf_ent_nadv, &
+                    mf_upa, mf_upw, mf_dnw, mf_upmf, mf_upqt, mf_dnqt, mf_upthl, mf_dnthl, &
+                    mf_upthv, mf_upth, mf_upqc, mf_upbuoy, mf_updet, mf_upent, &
+                    mf_thlforcup_nadv, mf_qtforcup_nadv, mf_thlforcdn_nadv, &
+                    mf_qtforcdn_nadv, mf_thlforc_nadv, mf_qtforc_nadv, tpert, &
+                    ztopma, ztopmn, mf_sqtup, mf_sqtdn, prec_sh_pbuf, snow_sh_pbuf, ddcpmn, &
+                    mf_cloudfrac_zt, mf_qc_zt, &
                     errmsg, errflg ) ! out
 
     if (errflg /= 0) then
       call endrun(errmsg)
+    end if
+
+    if (do_clubb_mf) then
+      ! Select output arrays are set to pbuf variables and need to be on the CAM grid
+      do i=1,ncol
+        do k=1,top_lev-1
+          mf_cloudfrac_output(i,k)          = 0._r8
+          mf_qc_output(i,k)                 = 0._r8
+        end do
+        do k=top_lev,pver
+          k_clubb = k + 1 - top_lev
+          mf_cloudfrac_output(i,k)          = mf_cloudfrac_zt(i,k_clubb)
+          mf_qc_output(i,k)                 = mf_qc_zt(i,k_clubb)
+        end do
+      end do
+
+      do i=1,ncol
+        mf_ztop_output(i) = MAXVAL(ztopma(i,:))
+        mf_cape_output(i) = MAXVAL(mf_cape_nadv(i,:))
+        mf_ddcp_output(i) = MAXVAL(ddcp(i,:))
+        mf_L0_output(i)   = MAXVAL(mf_L0_nadv(i,:))
+      end do
+
+      mf_cfl_output(:ncol)  = max_cfl_nadv(:ncol)
+      mf_freq_output(:ncol) = mf_freq_nadv(:ncol)
     end if
 
     do k = 1, pver
@@ -2680,8 +2822,9 @@ end subroutine clubb_init_cnst
                     state_loc%v, cmfmc, cam_in%cflx, state_loc%q, & ! in
                     single_column, scm_cambfb_mode, lq, & ! in
                     cnst_type, scm_clubb_iop_name, subcol_scheme, & ! in
+                    mf_cloudfrac_output, mf_qc_output, & ! in
                     pblh_pbuf, alst_pbuf, qlst_pbuf, deepcu_pbuf, shalcu_pbuf, & ! inout
-                    cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf,  & ! inout
+                    cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf, sh_icwmr_pbuf, & ! inout
                     qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, ptend_all%q, troplev, & ! inout
                     errmsg, errflg ) ! out
 
@@ -2727,15 +2870,13 @@ end subroutine clubb_init_cnst
         upwp_output(i,k)            =   upwp_pbuf(i,k_clubb)
         vpwp_output(i,k)            =   vpwp_pbuf(i,k_clubb)
         rtp2_output(i,k)            =   rtp2_pbuf(i,k_clubb)
-        wprcp_clubb_output(i,k)     =       wprcp(i,k_clubb) * latvap
-        wpthvp_clubb_output(i,k)    = wpthvp_pbuf(i,k_clubb) * cpair
+        wprcp_output(i,k)           =       wprcp(i,k_clubb) * latvap
+        wpthvp_output(i,k)          = wpthvp_pbuf(i,k_clubb) * cpair
         thlp2_output(i,k)           =  thlp2_pbuf(i,k_clubb)
 
-        wpthlp_output(i,k)  = ( wpthlp_pbuf(i,k_clubb) - (apply_const *  wpthlp_const) ) &
-                              * rho_zm(i,k_clubb) * cpair !  liquid water potential temperature flux
+        wpthlp_output(i,k)  = ( wpthlp_pbuf(i,k_clubb) - (apply_const *  wpthlp_const) ) !  liquid water potential temperature flux
 
-        wprtp_output(i,k)   = (  wprtp_pbuf(i,k_clubb) - (apply_const *   wprtp_const) ) &
-                              * rho_zm(i,k_clubb) * latvap  !  total water mixig ratio flux
+        wprtp_output(i,k)   = (  wprtp_pbuf(i,k_clubb) - (apply_const *   wprtp_const) ) !  total water mixig ratio flux
 
         rtpthlp_output(i,k) =  rtpthlp_pbuf(i,k_clubb) - (apply_const * rtpthlp_const)
 
@@ -2815,8 +2956,8 @@ end subroutine clubb_init_cnst
         wprtp_output(i,k)           = 0._r8
         upwp_output(i,k)            = 0._r8
         vpwp_output(i,k)            = 0._r8
-        wprcp_clubb_output(i,k)     = 0._r8
-        wpthvp_clubb_output(i,k)    = 0._r8
+        wprcp_output(i,k)           = 0._r8
+        wpthvp_output(i,k)          = 0._r8
       end do
     end do
 
@@ -2834,8 +2975,8 @@ end subroutine clubb_init_cnst
     call outfld( 'RCM_CLUBB',        rcm_output,                     pcols, lchnk )
     call outfld( 'RTM_CLUBB',        rtm_output,                     pcols, lchnk )
     call outfld( 'THLM_CLUBB',       thlm_output,                    pcols, lchnk )
-    call outfld( 'WPRCP_CLUBB',      wprcp_clubb_output,             pcols, lchnk )
-    call outfld( 'WPTHVP_CLUBB',     wpthvp_clubb_output,            pcols, lchnk )
+    call outfld( 'WPRCP_CLUBB',      wprcp_output,                   pcols, lchnk )
+    call outfld( 'WPTHVP_CLUBB',     wpthvp_output,                  pcols, lchnk )
     call outfld( 'RTP2_ZT_CLUBB',    rtp2_zt_output,                 pcols, lchnk )
     call outfld( 'THLP2_ZT_CLUBB',   thl2_zt_output,                 pcols, lchnk )
     call outfld( 'WP2_ZT_CLUBB',     wp2_zt_output,                  pcols, lchnk )
@@ -2864,62 +3005,150 @@ end subroutine clubb_init_cnst
     ! Writing state variables after EDMF scheme for detailed analysis !
     ! --------------------------------------------------------------- !
     if (do_clubb_mf) then
+      ! Initialize Output arrays
+      mf_dry_a_output(:ncol,:)     = 0._r8
+      mf_moist_a_output(:ncol,:)   = 0._r8
+      mf_dry_w_output(:ncol,:)     = 0._r8
+      mf_moist_w_output(:ncol,:)   = 0._r8
+      mf_dry_qt_output(:ncol,:)    = 0._r8
+      mf_moist_qt_output(:ncol,:)  = 0._r8
+      mf_dry_thl_output(:ncol,:)   = 0._r8
+      mf_moist_thl_output(:ncol,:) = 0._r8
+      mf_dry_u_output(:ncol,:)     = 0._r8
+      mf_moist_u_output(:ncol,:)   = 0._r8
+      mf_dry_v_output(:ncol,:)     = 0._r8
+      mf_moist_v_output(:ncol,:)   = 0._r8
+      mf_moist_qc_output(:ncol,:)  = 0._r8
+      s_ae_output(:ncol,:)         = 0._r8
+      s_aw_output(:ncol,:)         = 0._r8
+      s_awthl_output(:ncol,:)      = 0._r8
+      s_awqt_output(:ncol,:)       = 0._r8
+      s_awu_output(:ncol,:)        = 0._r8
+      s_awv_output(:ncol,:)        = 0._r8
+      mf_thlflx_output(:ncol,:)    = 0._r8
+      mf_qtflx_output(:ncol,:)     = 0._r8
+      s_awthlup_output(:ncol,:)    = 0._r8
+      s_awqtup_output(:ncol,:)     = 0._r8
+      s_awuup_output(:ncol,:)      = 0._r8
+      s_awvup_output(:ncol,:)      = 0._r8
+      s_awthldn_output(:ncol,:)    = 0._r8
+      s_awqtdn_output(:ncol,:)     = 0._r8
+      s_awudn_output(:ncol,:)      = 0._r8
+      s_awvdn_output(:ncol,:)      = 0._r8
+      s_aww_output(:ncol,:)        = 0._r8
+      mf_thlflxup_output(:ncol,:)  = 0._r8
+      mf_qtflxup_output(:ncol,:)   = 0._r8
+      mf_uflxup_output(:ncol,:)    = 0._r8
+      mf_vflxup_output(:ncol,:)    = 0._r8
+      mf_thlflxdn_output(:ncol,:)  = 0._r8
+      mf_qtflxdn_output(:ncol,:)   = 0._r8
+      mf_uflxdn_output(:ncol,:)    = 0._r8
+      mf_vflxdn_output(:ncol,:)    = 0._r8
+      mf_uflx_output(:ncol,:)      = 0._r8
+      mf_vflx_output(:ncol,:)      = 0._r8
+      mf_thvflx_output(:ncol,:)    = 0._r8
+      mf_rcm_output(:ncol,:)       = 0._r8
+      mf_precc_output(:ncol,:)     = 0._r8
+      mf_upa_output(:ncol,:)       = 0._r8
+      mf_upw_output(:ncol,:)       = 0._r8
+      mf_upmf_output(:ncol,:)      = 0._r8
+      mf_upqt_output(:ncol,:)      = 0._r8
+      mf_upthl_output(:ncol,:)     = 0._r8
+      mf_upthv_output(:ncol,:)     = 0._r8
+      mf_upth_output(:ncol,:)      = 0._r8
+      mf_upqc_output(:ncol,:)      = 0._r8
+      mf_upent_output(:ncol,:)     = 0._r8
+      mf_updet_output(:ncol,:)     = 0._r8
+      mf_upbuoy_output(:ncol,:)    = 0._r8
+      mf_dnw_output(:ncol,:)       = 0._r8
+      mf_dnthl_output(:ncol,:)     = 0._r8
+      mf_dnqt_output(:ncol,:)      = 0._r8
 
-      do k = top_lev, pverp
-        do i = 1, ncol
-          k_clubb = k + 1 - top_lev
-          mf_dry_a_output(i,k)     = mf_dry_a(i,k_clubb)
-          mf_moist_a_output(i,k)   = mf_moist_a(i,k_clubb)
-          mf_dry_w_output(i,k)     = mf_dry_w(i,k_clubb)
-          mf_moist_w_output(i,k)   = mf_moist_w(i,k_clubb)
-          mf_dry_qt_output(i,k)    = mf_dry_qt(i,k_clubb)
-          mf_moist_qt_output(i,k)  = mf_moist_qt(i,k_clubb)
-          mf_dry_thl_output(i,k)   = mf_dry_thl(i,k_clubb)
-          mf_moist_thl_output(i,k) = mf_moist_thl(i,k_clubb)
-          mf_dry_u_output(i,k)     = mf_dry_u(i,k_clubb)
-          mf_moist_u_output(i,k)   = mf_moist_u(i,k_clubb)
-          mf_dry_v_output(i,k)     = mf_dry_v(i,k_clubb)
-          mf_moist_v_output(i,k)   = mf_moist_v(i,k_clubb)
-          mf_moist_qc_output(i,k)  = mf_moist_qc(i,k_clubb)
-          s_ae_output(i,k)         = s_ae(i,k_clubb)
-          s_aw_output(i,k)         = s_aw(i,k_clubb)
-          s_awthl_output(i,k)      = s_awthl(i,k_clubb)
-          s_awqt_output(i,k)       = s_awqt(i,k_clubb)
-          s_awql_output(i,k)       = s_awql(i,k_clubb)
-          s_awqi_output(i,k)       = s_awqi(i,k_clubb)
-          s_awu_output(i,k)        = s_awu(i,k_clubb)
-          s_awv_output(i,k)        = s_awv(i,k_clubb)
-          mf_thlflx_output(i,k)    = mf_thlflx(i,k_clubb) * rho_zm(i,k_clubb) * cpair
-          mf_qtflx_output(i,k)     = mf_qtflx(i,k_clubb) * rho_zm(i,k_clubb) * latvap
-        end do
-      end do
+      mf_thlforc_output   (:ncol,:) = 0._r8
+      mf_qtforc_output    (:ncol,:) = 0._r8
+      mf_thlforcup_output (:ncol,:) = 0._r8
+      mf_qtforcup_output  (:ncol,:) = 0._r8
+      mf_thlforcdn_output (:ncol,:) = 0._r8
+      mf_qtforcdn_output  (:ncol,:) = 0._r8
+      mf_ent_output       (:ncol,:) = 0._r8
+      mf_sqtup_output     (:ncol,:) = 0._r8
+      mf_sqtdn_output     (:ncol,:) = 0._r8
 
-      do k = 1, top_lev-1
-        do i = 1, ncol
-          mf_dry_a_output(i,k)     = 0._r8
-          mf_moist_a_output(i,k)   = 0._r8
-          mf_dry_w_output(i,k)     = 0._r8
-          mf_moist_w_output(i,k)   = 0._r8
-          mf_dry_qt_output(i,k)    = 0._r8
-          mf_moist_qt_output(i,k)  = 0._r8
-          mf_dry_thl_output(i,k)   = 0._r8
-          mf_moist_thl_output(i,k) = 0._r8
-          mf_dry_u_output(i,k)     = 0._r8
-          mf_moist_u_output(i,k)   = 0._r8
-          mf_dry_v_output(i,k)     = 0._r8
-          mf_moist_v_output(i,k)   = 0._r8
-          mf_moist_qc_output(i,k)  = 0._r8
-          s_ae_output(i,k)         = 0._r8
-          s_aw_output(i,k)         = 0._r8
-          s_awthl_output(i,k)      = 0._r8
-          s_awqt_output(i,k)       = 0._r8
-          s_awql_output(i,k)       = 0._r8
-          s_awqi_output(i,k)       = 0._r8
-          s_awu_output(i,k)        = 0._r8
-          s_awv_output(i,k)        = 0._r8
-          mf_thlflx_output(i,k)    = 0._r8
-          mf_qtflx_output(i,k)     = 0._r8
-        end do
+      !array section fill toplev to pver for thermo grid variables
+      k_clubb_pver = pver - top_lev + 1
+      mf_thlforc_output   (:ncol,top_lev:pver) = mf_thlforc_nadv   (:ncol,1:k_clubb_pver)
+      mf_qtforc_output    (:ncol,top_lev:pver) = mf_qtforc_nadv    (:ncol,1:k_clubb_pver)
+      mf_thlforcup_output (:ncol,top_lev:pver) = mf_thlforcup_nadv (:ncol,1:k_clubb_pver)
+      mf_qtforcup_output  (:ncol,top_lev:pver) = mf_qtforcup_nadv  (:ncol,1:k_clubb_pver)
+      mf_thlforcdn_output (:ncol,top_lev:pver) = mf_thlforcdn_nadv (:ncol,1:k_clubb_pver)
+      mf_qtforcdn_output  (:ncol,top_lev:pver) = mf_qtforcdn_nadv  (:ncol,1:k_clubb_pver)
+      mf_ent_output       (:ncol,top_lev:pver) = mf_ent_nadv       (:ncol,1:k_clubb_pver)
+      mf_sqtup_output     (:ncol,top_lev:pver) = mf_sqtup          (:ncol,1:k_clubb_pver)
+      mf_sqtdn_output     (:ncol,top_lev:pver) = mf_sqtdn          (:ncol,1:k_clubb_pver)
+
+      !array section fill toplev to pverp for momentum grid variables
+      k_clubb = pverp - top_lev + 1
+
+      mf_dry_a_output  (:ncol, top_lev:pverp) = mf_dry_a  (:ncol, 1:k_clubb)
+      mf_moist_a_output(:ncol, top_lev:pverp) = mf_moist_a(:ncol, 1:k_clubb)
+      mf_dry_w_output  (:ncol, top_lev:pverp) = mf_dry_w  (:ncol, 1:k_clubb)
+      mf_moist_w_output(:ncol, top_lev:pverp) = mf_moist_w(:ncol, 1:k_clubb)
+      mf_dry_qt_output(:ncol, top_lev:pverp)    = mf_dry_qt(:ncol, 1:k_clubb)
+      mf_moist_qt_output(:ncol, top_lev:pverp)  = mf_moist_qt(:ncol, 1:k_clubb)
+      mf_dry_thl_output(:ncol, top_lev:pverp)   = mf_dry_thl(:ncol, 1:k_clubb)
+      mf_moist_thl_output(:ncol, top_lev:pverp) = mf_moist_thl(:ncol, 1:k_clubb)
+      mf_dry_u_output(:ncol, top_lev:pverp)     = mf_dry_u(:ncol, 1:k_clubb)
+      mf_moist_u_output(:ncol, top_lev:pverp)   = mf_moist_u(:ncol, 1:k_clubb)
+      mf_dry_v_output(:ncol, top_lev:pverp)     = mf_dry_v(:ncol, 1:k_clubb)
+      mf_moist_v_output(:ncol, top_lev:pverp)   = mf_moist_v(:ncol, 1:k_clubb)
+      mf_moist_qc_output(:ncol, top_lev:pverp)  = mf_moist_qc(:ncol, 1:k_clubb)
+      s_ae_output(:ncol, top_lev:pverp)         = s_ae(:ncol, 1:k_clubb)
+      s_aw_output(:ncol, top_lev:pverp)         = s_aw(:ncol, 1:k_clubb)
+      s_awthl_output(:ncol, top_lev:pverp)      = s_awthl(:ncol, 1:k_clubb)
+      s_awqt_output(:ncol, top_lev:pverp)       = s_awqt(:ncol, 1:k_clubb)
+      s_awu_output(:ncol, top_lev:pverp)        = s_awu(:ncol, 1:k_clubb)
+      s_awv_output(:ncol, top_lev:pverp)        = s_awv(:ncol, 1:k_clubb)
+      mf_thlflx_output(:ncol, top_lev:pverp)    = mf_thlflx(:ncol, 1:k_clubb)
+      mf_qtflx_output(:ncol, top_lev:pverp)     = mf_qtflx(:ncol, 1:k_clubb)
+      s_awthlup_output(:ncol, top_lev:pverp)    = s_awthlup(:ncol, 1:k_clubb)
+      s_awqtup_output(:ncol, top_lev:pverp)     = s_awqtup(:ncol, 1:k_clubb)
+      s_awuup_output(:ncol, top_lev:pverp)      = s_awuup(:ncol, 1:k_clubb)
+      s_awvup_output(:ncol, top_lev:pverp)      = s_awvup(:ncol, 1:k_clubb)
+      s_awthldn_output(:ncol, top_lev:pverp)    = s_awthldn(:ncol, 1:k_clubb)
+      s_awqtdn_output(:ncol, top_lev:pverp)     = s_awqtdn(:ncol, 1:k_clubb)
+      s_awudn_output(:ncol, top_lev:pverp)      = s_awudn(:ncol, 1:k_clubb)
+      s_awvdn_output(:ncol, top_lev:pverp)      = s_awvdn(:ncol, 1:k_clubb)
+      s_aww_output(:ncol, top_lev:pverp)        = s_aww(:ncol, 1:k_clubb)
+      mf_thlflxup_output(:ncol, top_lev:pverp)  = mf_thlflxup(:ncol, 1:k_clubb)
+      mf_qtflxup_output(:ncol, top_lev:pverp)   = mf_qtflxup(:ncol, 1:k_clubb)
+      mf_uflxup_output(:ncol, top_lev:pverp)    = mf_uflxup(:ncol, 1:k_clubb)
+      mf_vflxup_output(:ncol, top_lev:pverp)    = mf_vflxup(:ncol, 1:k_clubb)
+      mf_thlflxdn_output(:ncol, top_lev:pverp)  = mf_thlflxdn(:ncol, 1:k_clubb)
+      mf_qtflxdn_output(:ncol, top_lev:pverp)   = mf_qtflxdn(:ncol, 1:k_clubb)
+      mf_uflxdn_output(:ncol, top_lev:pverp)    = mf_uflxdn(:ncol, 1:k_clubb)
+      mf_vflxdn_output(:ncol, top_lev:pverp)    = mf_vflxdn(:ncol, 1:k_clubb)
+      mf_uflx_output(:ncol, top_lev:pverp)      = mf_uflx(:ncol, 1:k_clubb)
+      mf_vflx_output(:ncol, top_lev:pverp)      = mf_vflx(:ncol, 1:k_clubb)
+      mf_thvflx_output(:ncol, top_lev:pverp)    = mf_thvflx(:ncol, 1:k_clubb)
+      mf_rcm_output(:ncol, top_lev:pverp)       = mf_rcm(:ncol, 1:k_clubb)
+      mf_precc_output(:ncol, top_lev:pverp)     = mf_precc(:ncol, 1:k_clubb)
+
+      ! fill plume output arrays
+      do k = 1, clubb_mf_nup
+         mf_upa_output  (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upa   (:ncol, 1:pverp-top_lev+1, k)
+         mf_upw_output  (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upw   (:ncol, 1:pverp-top_lev+1, k)
+         mf_upmf_output (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upmf  (:ncol, 1:pverp-top_lev+1, k)
+         mf_upqt_output (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upqt  (:ncol, 1:pverp-top_lev+1, k)
+         mf_upthl_output(:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upthl (:ncol, 1:pverp-top_lev+1, k)
+         mf_upthv_output(:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upthv (:ncol, 1:pverp-top_lev+1, k)
+         mf_upth_output (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upth  (:ncol, 1:pverp-top_lev+1, k)
+         mf_upqc_output (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upqc  (:ncol, 1:pverp-top_lev+1, k)
+         mf_upent_output(:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_upent (:ncol, 1:pverp-top_lev+1, k)
+         mf_updet_output(:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_updet (:ncol, 1:pverp-top_lev+1, k)
+         mf_upbuoy_output(:ncol,pverp*(k-1)+top_lev : pverp*k) = mf_upbuoy(:ncol, 1:pverp-top_lev+1, k)
+         mf_dnw_output  (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_dnw   (:ncol, 1:pverp-top_lev+1, k)
+         mf_dnthl_output(:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_dnthl (:ncol, 1:pverp-top_lev+1, k)
+         mf_dnqt_output (:ncol, pverp*(k-1)+top_lev : pverp*k) = mf_dnqt  (:ncol, 1:pverp-top_lev+1, k)
       end do
 
       call outfld( 'edmf_DRY_A'    , mf_dry_a_output,           pcols, lchnk )
@@ -2935,15 +3164,61 @@ end subroutine clubb_init_cnst
       call outfld( 'edmf_DRY_V'    , mf_dry_v_output,           pcols, lchnk )
       call outfld( 'edmf_MOIST_V'  , mf_moist_v_output,         pcols, lchnk )
       call outfld( 'edmf_MOIST_QC' , mf_moist_qc_output,        pcols, lchnk )
+      call outfld( 'edmf_precc'    , mf_precc_output,           pcols, lchnk )
       call outfld( 'edmf_S_AE'     , s_ae_output,               pcols, lchnk )
       call outfld( 'edmf_S_AW'     , s_aw_output,               pcols, lchnk )
+      call outfld( 'edmf_S_AWW'    , s_aww_output,              pcols, lchnk )
       call outfld( 'edmf_S_AWTHL'  , s_awthl_output,            pcols, lchnk )
       call outfld( 'edmf_S_AWQT'   , s_awqt_output,             pcols, lchnk )
       call outfld( 'edmf_S_AWU'    , s_awu_output,              pcols, lchnk )
       call outfld( 'edmf_S_AWV'    , s_awv_output,              pcols, lchnk )
+      call outfld( 'edmf_thlforcup', mf_thlforcup_output,       pcols, lchnk )
+      call outfld( 'edmf_qtforcup' , mf_qtforcup_output,        pcols, lchnk )
+      call outfld( 'edmf_thlforcdn', mf_thlforcdn_output,       pcols, lchnk )
+      call outfld( 'edmf_qtforcdn' , mf_qtforcdn_output,        pcols, lchnk )
+      call outfld( 'edmf_thlforc'  , mf_thlforc_output,         pcols, lchnk )
+      call outfld( 'edmf_qtforc'   , mf_qtforc_output,          pcols, lchnk )
+      call outfld( 'edmf_thlflxup' , mf_thlflxup_output,        pcols, lchnk )
+      call outfld( 'edmf_qtflxup'  , mf_qtflxup_output,         pcols, lchnk )
+      call outfld( 'edmf_thlflxdn' , mf_thlflxdn_output,        pcols, lchnk )
+      call outfld( 'edmf_qtflxdn'  , mf_qtflxdn_output,         pcols, lchnk )
       call outfld( 'edmf_thlflx'   , mf_thlflx_output,          pcols, lchnk )
       call outfld( 'edmf_qtflx'    , mf_qtflx_output,           pcols, lchnk )
+      call outfld( 'edmf_thvflx'   , mf_thvflx_output,          pcols, lchnk )
+      call outfld( 'edmf_rcm'      , mf_rcm_output,             pcols, lchnk )
+      call outfld( 'edmf_uflxup'   , mf_uflxup_output,          pcols, lchnk )
+      call outfld( 'edmf_vflxup'   , mf_vflxup_output,          pcols, lchnk )
+      call outfld( 'edmf_uflxdn'   , mf_uflxdn_output,          pcols, lchnk )
+      call outfld( 'edmf_vflxdn'   , mf_vflxdn_output,          pcols, lchnk )
+      call outfld( 'edmf_uflx'     , mf_uflx_output,            pcols, lchnk )
+      call outfld( 'edmf_vflx'     , mf_vflx_output,            pcols, lchnk )
+      call outfld( 'edmf_cloudfrac', mf_cloudfrac_output,       pcols, lchnk )
+      call outfld( 'edmf_ent'      , mf_ent_output,             pcols, lchnk )
+      call outfld( 'edmf_upa'      , mf_upa_output,             pcols, lchnk )
+      call outfld( 'edmf_upw'      , mf_upw_output,             pcols, lchnk )
+      call outfld( 'edmf_upmf'     , mf_upmf_output,            pcols, lchnk )
+      call outfld( 'edmf_upqt'     , mf_upqt_output,            pcols, lchnk )
+      call outfld( 'edmf_upthl'    , mf_upthl_output,           pcols, lchnk )
+      call outfld( 'edmf_upthv'    , mf_upthv_output,           pcols, lchnk )
+      call outfld( 'edmf_upth'     , mf_upth_output,            pcols, lchnk )
+      call outfld( 'edmf_upqc'     , mf_upqc_output,            pcols, lchnk )
+      call outfld( 'edmf_upbuoy'   , mf_upbuoy_output,          pcols, lchnk )
+      call outfld( 'edmf_upent'    , mf_upent_output,           pcols, lchnk )
+      call outfld( 'edmf_updet'    , mf_updet_output,           pcols, lchnk )
+      call outfld( 'edmf_dnw'      , mf_dnw_output,             pcols, lchnk )
+      call outfld( 'edmf_dnthl'    , mf_dnthl_output,           pcols, lchnk )
+      call outfld( 'edmf_dnqt'     , mf_dnqt_output,            pcols, lchnk )
+      call outfld( 'edmf_sqtup'    , mf_sqtup_output,           pcols, lchnk )
+      call outfld( 'edmf_sqtdn'    , mf_sqtdn_output,           pcols, lchnk )
 
+      ! macmic_it==1 ensures that this is ddcp aeraged over the prior time-steps
+      if (macmic_it==1) call outfld( 'edmf_ztop'     , mf_ztop_output,            pcols, lchnk )
+      if (macmic_it==1) call outfld( 'edmf_ddcp'     , mf_ddcp_output,            pcols, lchnk )
+
+      call outfld( 'edmf_L0'       , mf_L0_output,              pcols, lchnk )
+      call outfld( 'edmf_freq'     , mf_freq_output,            pcols, lchnk )
+      call outfld( 'edmf_cape'     , mf_cape_output,            pcols, lchnk )
+      call outfld( 'edmf_cfl'      , mf_cfl_output,             pcols, lchnk )
     end if
 
     !  Output CLUBB history here
