@@ -2628,9 +2628,9 @@ end subroutine clubb_init_cnst
                     !do_clubb_mf, 
                     l_implemented, grid_type, lq, deep_scheme, & ! in
                     state_loc%q, state_loc%t, state_loc%pmid, state_loc%zm, & ! in
-                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, state%ps, & ! in
-                    state_loc%pint, state_loc%zi, state_loc%omega, cam_in%wsx, & ! in
-                    cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, & ! in
+                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, & ! in
+                    state_loc%pint, state_loc%zi, state_loc%omega, state_loc%ps, & ! in
+                    cam_in%wsx, cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, & ! in
                     sclr_idx, clubb_l_ascending_grid, clubb_do_energyfix, & ! in
                     ixq, ixcldliq, ixcldice, ixrtpthlp, ixwpthlp, & ! in
                     ixwprtp, ixwp3, ixwp2, ixthlp2, ixrtp2, ixup2, ixvp2, & ! in
