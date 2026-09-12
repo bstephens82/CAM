@@ -2625,12 +2625,11 @@ end subroutine clubb_init_cnst
                     wp3_const, cld_macmic_num_steps, clubb_params_single_col, & ! in
                     cpair, cpairv(:,:,lchnk), rair, inv_p0_clubb, rairv(:,:,lchnk), zvir, latvap, latice, & ! in
                     rga, gravit, clubb_rnevap_effic, do_cldcool, do_rainturb, & ! in
-                    !do_clubb_mf, 
                     l_implemented, grid_type, lq, deep_scheme, & ! in
                     state_loc%q, state_loc%t, state_loc%pmid, state_loc%zm, & ! in
                     state_loc%phis, state_loc%pdel, state_loc%pdeldry, & ! in
                     state_loc%pint, state_loc%zi, state_loc%omega, state_loc%ps, & ! in
-                    cam_in%wsx, cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, & ! in
+                    cam_in%wsx, cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, tpert, & ! in
                     sclr_idx, clubb_l_ascending_grid, clubb_do_energyfix, & ! in
                     ixq, ixcldliq, ixcldice, ixrtpthlp, ixwpthlp, & ! in
                     ixwprtp, ixwp3, ixwp2, ixthlp2, ixrtp2, ixup2, ixvp2, & ! in
@@ -2667,17 +2666,17 @@ end subroutine clubb_init_cnst
                     stats_zt, stats_zm, stats_sfc, stats_rad_zt, stats_rad_zm, & ! inout
                     out_zt, out_zm, out_sfc, out_radzt, out_radzm, & ! inout
                     invrs_cpairv, clubbtop_pbuf, & ! inout
-                    mf_ztop_nadv, mf_L0_nadv, mf_cape_nadv, max_cfl_nadv, mf_freq_nadv, &
-                    s_aww, s_awthlup, s_awqtup, s_awuup, s_awvup, s_awthldn, &
-                    s_awqtdn, s_awudn, s_awvdn, mf_precc, mf_thlflxup, mf_qtflxup, &
-                    mf_uflxup, mf_vflxup, mf_thlflxdn, mf_qtflxdn, mf_uflxdn, mf_vflxdn, &
-                    mf_uflx, mf_vflx, mf_thvflx, mf_rcm, mf_ent_nadv, &
-                    mf_upa, mf_upw, mf_dnw, mf_upmf, mf_upqt, mf_dnqt, mf_upthl, mf_dnthl, &
-                    mf_upthv, mf_upth, mf_upqc, mf_upbuoy, mf_updet, mf_upent, &
-                    mf_thlforcup_nadv, mf_qtforcup_nadv, mf_thlforcdn_nadv, &
-                    mf_qtforcdn_nadv, mf_thlforc_nadv, mf_qtforc_nadv, tpert, &
-                    ztopma, ztopmn, mf_sqtup, mf_sqtdn, prec_sh_pbuf, snow_sh_pbuf, ddcpmn, &
-                    mf_cloudfrac_zt, mf_qc_zt, &
+                    mf_ztop_nadv, mf_L0_nadv, mf_cape_nadv, max_cfl_nadv, mf_freq_nadv, & ! inout
+                    s_aww, s_awthlup, s_awqtup, s_awuup, s_awvup, s_awthldn, & ! inout
+                    s_awqtdn, s_awudn, s_awvdn, mf_precc, mf_thlflxup, mf_qtflxup, & ! inout
+                    mf_uflxup, mf_vflxup, mf_thlflxdn, mf_qtflxdn, mf_uflxdn, mf_vflxdn, & ! inout
+                    mf_uflx, mf_vflx, mf_thvflx, mf_rcm, mf_ent_nadv, & ! inout
+                    mf_upa, mf_upw, mf_dnw, mf_upmf, mf_upqt, mf_dnqt, mf_upthl, mf_dnthl, & ! inout
+                    mf_upthv, mf_upth, mf_upqc, mf_upbuoy, mf_updet, mf_upent, & ! inout
+                    mf_thlforcup_nadv, mf_qtforcup_nadv, mf_thlforcdn_nadv, & ! inout
+                    mf_qtforcdn_nadv, mf_thlforc_nadv, mf_qtforc_nadv, & ! inout
+                    ztopma, ztopmn, mf_sqtup, mf_sqtdn, prec_sh_pbuf, snow_sh_pbuf, ddcpmn, & ! inout
+                    mf_cloudfrac_zt, mf_qc_zt, & ! inout
                     errmsg, errflg ) ! out
 
     if (errflg /= 0) then
