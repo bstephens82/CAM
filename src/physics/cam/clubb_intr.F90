@@ -446,7 +446,6 @@ module clubb_intr
     pblh_idx, &         ! PBL pbuf
     icwmrdp_idx, &	    ! In cloud mixing ratio for deep convection
     tke_idx, &          ! turbulent kinetic energy
-    icwmrsh_idx, &      ! In cloud mixing ratio for shallow convection (MF)
     tpert_idx, &        ! temperature perturbation from PBL
     fice_idx, &         ! fice_idx index in physics buffer
     cmeliq_idx, &       ! cmeliq_idx index in physics buffer
@@ -491,9 +490,23 @@ module clubb_intr
   integer :: &
     cmfmc_sh_idx = 0
 
-  integer :: &
-    prec_sh_idx, &
-    snow_sh_idx
+  ! deep-convection pbuf indices for the MF-plume deep hookup (all of
+  ! these fields, including the ZM_* gathered arrays, are registered by
+  ! convect_deep_register when deep_scheme='CLUBB_MF'; clubb populates them)
+  integer :: prec_dp_idx     = 0
+  integer :: snow_dp_idx     = 0
+  integer :: rprddp_idx      = 0
+  integer :: nevapr_dpcu_idx = 0
+  integer :: zm_dsubcld_idx  = 0
+  integer :: zm_mu_idx       = 0
+  integer :: zm_eu_idx       = 0
+  integer :: zm_du_idx       = 0
+  integer :: zm_md_idx       = 0
+  integer :: zm_ed_idx       = 0
+  integer :: zm_dp_idx       = 0
+  integer :: zm_jt_idx       = 0
+  integer :: zm_maxg_idx     = 0
+  integer :: zm_ideep_idx    = 0
 
   integer ::           &
     ztopmn_idx,        &
@@ -504,6 +517,24 @@ module clubb_intr
     ddcpmn_idx,        &
     cbm1_idx,          &
     cbm1_macmic_idx
+
+  ! CLUBB_MF macmic accumulators for the deep-hookup variables
+  integer ::               &
+    mfup_macmic_idx  = 0,  &
+    entup_macmic_idx = 0,  &
+    detup_macmic_idx = 0,  &
+    mfdn_macmic_idx  = 0,  &
+    entdn_macmic_idx = 0,  &
+    detdn_macmic_idx = 0,  &
+    sqtac_macmic_idx = 0,  &
+    sqtev_macmic_idx = 0,  &
+    kctop_macmic_idx = 0
+
+  ! CLUBB_MF accumulators for the plume-ensemble updraft speed passed to aero_convproc
+  integer ::                &
+    sawwup_macmic_idx = 0,  &
+    sawup_macmic_idx  = 0,  &
+    mf_wup_idx        = 0
 
   contains
 
@@ -662,6 +693,23 @@ module clubb_intr
       call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols,clubb_mf_nup/), ddcpmn_idx)
       call pbuf_add_field('CBM1'               ,'global' ,  dtype_r8, (/pcols/), cbm1_idx)
       call pbuf_add_field('CBM1_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), cbm1_macmic_idx)
+
+      ! ZM gathered-array pbuf fields (ZM_MU/.../ZM_IDEEP) are
+      ! registered by convect_deep_register (deep_scheme='CLUBB_MF'), which
+      ! owns the deep-convection interface; clubb_tend_cam populates them from
+      ! the plume ensemble (indices fetched in clubb_ini_cam).
+      call pbuf_add_field('MFUP_MACMIC' ,'physpkg', dtype_r8, (/pcols,nzm_clubb/), mfup_macmic_idx)
+      call pbuf_add_field('ENTUP_MACMIC','physpkg', dtype_r8, (/pcols,nzm_clubb/), entup_macmic_idx)
+      call pbuf_add_field('DETUP_MACMIC','physpkg', dtype_r8, (/pcols,nzm_clubb/), detup_macmic_idx)
+      call pbuf_add_field('MFDN_MACMIC' ,'physpkg', dtype_r8, (/pcols,nzm_clubb/), mfdn_macmic_idx)
+      call pbuf_add_field('ENTDN_MACMIC','physpkg', dtype_r8, (/pcols,nzm_clubb/), entdn_macmic_idx)
+      call pbuf_add_field('DETDN_MACMIC','physpkg', dtype_r8, (/pcols,nzm_clubb/), detdn_macmic_idx)
+      call pbuf_add_field('SQTAC_MACMIC','physpkg', dtype_r8, (/pcols,nzt_clubb/), sqtac_macmic_idx)
+      call pbuf_add_field('SQTEV_MACMIC','physpkg', dtype_r8, (/pcols,nzt_clubb/), sqtev_macmic_idx)
+      call pbuf_add_field('KCTOP_MACMIC','physpkg', dtype_r8, (/pcols/),           kctop_macmic_idx)
+      ! plume updraft-speed accumulators for convproc_aer
+      call pbuf_add_field('SAWWUP_MACMIC','physpkg', dtype_r8, (/pcols,nzm_clubb/), sawwup_macmic_idx)
+      call pbuf_add_field('SAWUP_MACMIC' ,'physpkg', dtype_r8, (/pcols,nzm_clubb/), sawup_macmic_idx)
     end if
 
 #endif
@@ -1545,7 +1593,6 @@ end subroutine clubb_init_cnst
     qist_idx            = pbuf_get_index('QIST')        ! Physical in-stratus IWC
     dp_frac_idx         = pbuf_get_index('DP_FRAC')     ! Deep convection cloud fraction
     icwmrdp_idx         = pbuf_get_index('ICWMRDP')     ! In-cloud deep convective mixing ratio
-    icwmrsh_idx         = pbuf_get_index('ICWMRSH')     ! In-cloud shallow convective mixing ratio (EDMF)
     sh_frac_idx         = pbuf_get_index('SH_FRAC')     ! Shallow convection cloud fraction
     relvar_idx          = pbuf_get_index('RELVAR')      ! Relative cloud water variance
     prer_evap_idx       = pbuf_get_index('PRER_EVAP')
@@ -1554,9 +1601,23 @@ end subroutine clubb_init_cnst
     naai_idx            = pbuf_get_index('NAAI')
     npccn_idx           = pbuf_get_index('NPCCN')
 
-    ! CLUBB+MF
-    prec_sh_idx  = pbuf_get_index('PREC_SH')
-    snow_sh_idx  = pbuf_get_index('SNOW_SH')
+    if (do_clubb_mf) then
+      prec_dp_idx     = pbuf_get_index('PREC_DP')
+      snow_dp_idx     = pbuf_get_index('SNOW_DP')
+      rprddp_idx      = pbuf_get_index('RPRDDP')
+      nevapr_dpcu_idx = pbuf_get_index('NEVAPR_DPCU')
+      zm_mu_idx       = pbuf_get_index('ZM_MU')
+      zm_eu_idx       = pbuf_get_index('ZM_EU')
+      zm_du_idx       = pbuf_get_index('ZM_DU')
+      zm_md_idx       = pbuf_get_index('ZM_MD')
+      zm_ed_idx       = pbuf_get_index('ZM_ED')
+      zm_dp_idx       = pbuf_get_index('ZM_DP')
+      zm_dsubcld_idx  = pbuf_get_index('ZM_DSUBCLD')
+      zm_jt_idx       = pbuf_get_index('ZM_JT')
+      zm_maxg_idx     = pbuf_get_index('ZM_MAXG')
+      zm_ideep_idx    = pbuf_get_index('ZM_IDEEP')
+      mf_wup_idx      = pbuf_get_index('MF_WUP')
+    end if
 
     ! ----------------------------------------------------------------- !
     ! Add output fields for the history files
@@ -1828,6 +1889,15 @@ end subroutine clubb_init_cnst
     !  Is this the first time step?  If so then initialize CLUBB variables as follows
     if (is_first_step()) then
 
+       if (do_clubb_mf) then
+          ! PREC_DP/SNOW_DP are 'global' pbuf fields (registered in
+          ! convect_deep) written in tphysac but exported to the coupler at
+          ! the end of tphysbc; on the first step cam_export reads them
+          ! before clubb has ever run, so they must start at zero
+          call pbuf_set_field(pbuf_ini, prec_dp_idx, 0.0_r8)
+          call pbuf_set_field(pbuf_ini, snow_dp_idx, 0.0_r8)
+       end if
+
        call pbuf_set_field(pbuf_ini, wp2_idx,     w_tol_sqd)
        call pbuf_set_field(pbuf_ini, wp3_idx,     0.0_r8)
        call pbuf_set_field(pbuf_ini, wpthlp_idx,  0.0_r8)
@@ -2024,9 +2094,6 @@ end subroutine clubb_init_cnst
     use time_manager,   only: get_nstep, is_first_restart_step, get_curr_calday, get_calday
     use perf_mod,       only: t_startf, t_stopf
 
-    use wv_saturation,   only: qsat
-    use interpolate_data,only: vertinterp
-
 #ifdef CLUBB_SGS
     use spmd_utils, only: iam
     use clubb_api_module, only: &
@@ -2131,7 +2198,6 @@ end subroutine clubb_init_cnst
     real(r8), pointer, dimension(:)   :: pblh_pbuf                  ! planetary boundary layer height                [m]
     real(r8), pointer, dimension(:,:) :: tke_pbuf                   ! turbulent kinetic energy                     [m^2/s^2]
     real(r8), pointer, dimension(:,:) :: dp_icwmr_pbuf              ! deep convection in cloud mixing ratio        [kg/kg]
-    real(r8), pointer, dimension(:,:) :: sh_icwmr_pbuf              ! shallow convection (EDMF) in cloud mixing ratio [kg/kg]
     real(r8), pointer, dimension(:,:) :: ice_supersat_frac_pbuf     ! Cloud fraction of ice clouds (pver)[fraction]
     real(r8), pointer, dimension(:,:) :: relvar_pbuf                ! relative cloud water variance                [-]
     real(r8), pointer, dimension(:,:) :: naai_pbuf
@@ -2164,9 +2230,39 @@ end subroutine clubb_init_cnst
     real(r8), pointer, dimension(:,:) :: wpthlp_clubb_gw_mc_pbuf
 
     ! CLUBB-MF pointers
-    real(r8),pointer :: prec_sh_pbuf(:)   ! total precipitation from MF
-    real(r8),pointer :: snow_sh_pbuf(:)   ! snow from MF
+    real(r8),pointer :: prec_dp_pbuf(:)   ! total precipitation from MF
+    real(r8),pointer :: snow_dp_pbuf(:)   ! snow from MF
 
+    ! deep-hookup pbuf pointers
+    real(r8), pointer :: rprddp(:,:)    ! Deep conv precip production (kg/kg/s - grid avg)
+    real(r8), pointer :: evapcdp(:,:)   ! Deep conv precip evaporation (kg/kg/s - grid avg)
+    real(r8), pointer :: mu(:,:)        ! Updraft mass flux (positive) (pcols,pver)
+    real(r8), pointer :: md(:,:)        ! Downdraft mass flux (negative) (pcols,pver)
+    real(r8), pointer :: du(:,:)        ! Mass detrain rate from updraft (pcols,pver)
+    real(r8), pointer :: eu(:,:)        ! Mass entrain rate into updraft (pcols,pver)
+    real(r8), pointer :: ed(:,:)        ! Mass entrain rate into downdraft (pcols,pver)
+    real(r8), pointer :: dpg(:,:)       ! Delta pressure between interfaces, mb (pcols,pver)
+    real(r8), pointer :: dsubcld(:)     ! Delta pressure from cloud base to sfc (pcols)
+    integer,  pointer :: jt(:)          ! Index of cloud top for each column (pcols)
+    integer,  pointer :: maxg(:)        ! Index of cloud base for each column (pcols)
+    integer,  pointer :: ideep(:)       ! Gathering array (pcols)
+
+    ! macmic accumulators for the deep-hookup variables
+    real(r8), pointer :: s_mfup_macmic(:,:)
+    real(r8), pointer :: s_entup_macmic(:,:)
+    real(r8), pointer :: s_detup_macmic(:,:)
+    real(r8), pointer :: s_mfdn_macmic(:,:)
+    real(r8), pointer :: s_entdn_macmic(:,:)
+    real(r8), pointer :: s_detdn_macmic(:,:)
+    real(r8), pointer :: mf_sqtac_macmic(:,:)
+    real(r8), pointer :: mf_sqtev_macmic(:,:)
+    real(r8), pointer :: mf_kctop_macmic(:)  ! highest plume top over the sub-cycles; also
+                                             ! the gathering (activity) criterion (ideep)
+    real(r8), pointer :: s_awwup_macmic(:,:)
+    real(r8), pointer :: s_awup_macmic(:,:)
+    real(r8), pointer :: wup_gath(:,:)
+
+    ! convective memory varaibles for CLUBB_MF
     real(r8), pointer :: ztopmn(:,:,:)
     real(r8), pointer :: ztopma(:,:)
     real(r8), pointer :: ztopm1_macmic(:,:)
@@ -2524,13 +2620,12 @@ end subroutine clubb_init_cnst
     call pbuf_get_field(pbuf, kvh_idx,            khzm_pbuf)
     call pbuf_get_field(pbuf, pblh_idx,           pblh_pbuf)
     call pbuf_get_field(pbuf, icwmrdp_idx,        dp_icwmr_pbuf)
-    call pbuf_get_field(pbuf, icwmrsh_idx,        sh_icwmr_pbuf)
     call pbuf_get_field(pbuf, cmfmc_sh_idx,       cmfmc_sh_pbuf)
 
-    call pbuf_get_field(pbuf, prec_sh_idx, prec_sh_pbuf )
-    call pbuf_get_field(pbuf, snow_sh_idx, snow_sh_pbuf )
-
     if (do_clubb_mf) then
+       call pbuf_get_field(pbuf, prec_dp_idx, prec_dp_pbuf )
+       call pbuf_get_field(pbuf, snow_dp_idx, snow_dp_pbuf )
+
        call pbuf_get_field(pbuf, tpert_idx, tpert)
 
        call pbuf_get_field(pbuf, ztopmn_idx, ztopmn)
@@ -2543,6 +2638,19 @@ end subroutine clubb_init_cnst
 
        call pbuf_get_field(pbuf, cbm1_idx, cbm1)
        call pbuf_get_field(pbuf, cbm1_macmic_idx, cbm1_macmic)
+
+       ! macmic accumulators for the deep-hookup variables
+       call pbuf_get_field(pbuf, mfup_macmic_idx,  s_mfup_macmic)
+       call pbuf_get_field(pbuf, entup_macmic_idx, s_entup_macmic)
+       call pbuf_get_field(pbuf, detup_macmic_idx, s_detup_macmic)
+       call pbuf_get_field(pbuf, mfdn_macmic_idx,  s_mfdn_macmic)
+       call pbuf_get_field(pbuf, entdn_macmic_idx, s_entdn_macmic)
+       call pbuf_get_field(pbuf, detdn_macmic_idx, s_detdn_macmic)
+       call pbuf_get_field(pbuf, sqtac_macmic_idx, mf_sqtac_macmic)
+       call pbuf_get_field(pbuf, sqtev_macmic_idx, mf_sqtev_macmic)
+       call pbuf_get_field(pbuf, kctop_macmic_idx, mf_kctop_macmic)
+       call pbuf_get_field(pbuf, sawwup_macmic_idx, s_awwup_macmic)
+       call pbuf_get_field(pbuf, sawup_macmic_idx,  s_awup_macmic)
 
     end if
 
@@ -2565,6 +2673,24 @@ end subroutine clubb_init_cnst
     call pbuf_get_field(pbuf, upwp_clubb_gw_mc_idx,   upwp_clubb_gw_mc_pbuf )
     call pbuf_get_field(pbuf, vpwp_clubb_gw_mc_idx,   vpwp_clubb_gw_mc_pbuf )
     call pbuf_get_field(pbuf, wpthlp_clubb_gw_mc_idx, wpthlp_clubb_gw_mc_pbuf )
+
+    if (do_clubb_mf) then
+      call pbuf_get_field(pbuf, rprddp_idx,      rprddp)  ! precip formation, grid avg (kg/kg/s)
+      call pbuf_get_field(pbuf, nevapr_dpcu_idx, evapcdp) ! precip evaporation rate (kg/kg/s)
+      call pbuf_get_field(pbuf, zm_mu_idx,       mu)
+      call pbuf_get_field(pbuf, zm_eu_idx,       eu)
+      call pbuf_get_field(pbuf, zm_du_idx,       du)
+      call pbuf_get_field(pbuf, zm_md_idx,       md)
+      call pbuf_get_field(pbuf, zm_ed_idx,       ed)
+      call pbuf_get_field(pbuf, zm_dp_idx,       dpg)     ! layer thickness (mb)
+      call pbuf_get_field(pbuf, zm_jt_idx,       jt)      ! top level index of convection
+      call pbuf_get_field(pbuf, zm_maxg_idx,     maxg)    ! launch (cloud-base) level index
+      call pbuf_get_field(pbuf, zm_ideep_idx,    ideep)
+      ! dsubcld is only used by zm and momtran, not by convtran or aero_convproc,
+      ! but zm_conv_tend_2-style consumers read the field, so keep it zeroed
+      call pbuf_get_field(pbuf, zm_dsubcld_idx,  dsubcld)
+      call pbuf_get_field(pbuf, mf_wup_idx,      wup_gath)
+    end if
 
     !  Initialize physics tendency arrays
     call physics_ptend_init(ptend_all, state%psetcols, 'clubb')
@@ -2627,7 +2753,7 @@ end subroutine clubb_init_cnst
                     rga, gravit, clubb_rnevap_effic, do_cldcool, do_rainturb, & ! in
                     l_implemented, grid_type, lq, deep_scheme, & ! in
                     state_loc%q, state_loc%t, state_loc%pmid, state_loc%zm, & ! in
-                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, & ! in
+                    state_loc%phis, state_loc%pdel, state_loc%pdeldry, state_loc%exner, & ! in
                     state_loc%pint, state_loc%zi, state_loc%omega, state_loc%ps, & ! in
                     cam_in%wsx, cam_in%wsy, cam_in%cflx, cam_in%shf, cam_in%landfrac, cam_in%ts, tpert, & ! in
                     sclr_idx, clubb_l_ascending_grid, clubb_do_energyfix, & ! in
@@ -2675,8 +2801,11 @@ end subroutine clubb_init_cnst
                     mf_upthv, mf_upth, mf_upqc, mf_upbuoy, mf_updet, mf_upent, & ! inout
                     mf_thlforcup_nadv, mf_qtforcup_nadv, mf_thlforcdn_nadv, & ! inout
                     mf_qtforcdn_nadv, mf_thlforc_nadv, mf_qtforc_nadv, & ! inout
-                    ztopma, ztopmn, mf_sqtup, mf_sqtdn, prec_sh_pbuf, snow_sh_pbuf, ddcpmn, & ! inout
-                    mf_cloudfrac_zt, mf_qc_zt, & ! inout
+                    ztopma, ztopmn, mf_sqtup, mf_sqtdn, prec_dp_pbuf, snow_dp_pbuf, ddcpmn, & ! inout
+                    s_mfup_macmic, s_entup_macmic, s_detup_macmic, s_mfdn_macmic, s_entdn_macmic, & ! inout 
+                    s_detdn_macmic, s_awwup_macmic, s_awup_macmic, mf_sqtac_macmic, mf_sqtev_macmic, mf_kctop_macmic, & ! inout
+                    wup_gath, mf_cloudfrac_zt, mf_qc_zt, & ! inout
+                    rprddp, evapcdp, mu, md, du, eu, ed, dpg, dsubcld, jt, maxg, ideep, & ! inout
                     errmsg, errflg ) ! out
 
     if (errflg /= 0) then
@@ -2823,7 +2952,7 @@ end subroutine clubb_init_cnst
                     cnst_type, scm_clubb_iop_name, subcol_scheme, & ! in
                     mf_cloudfrac_output, mf_qc_output, & ! in
                     pblh_pbuf, alst_pbuf, qlst_pbuf, deepcu_pbuf, shalcu_pbuf, & ! inout
-                    cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf, sh_icwmr_pbuf, & ! inout
+                    cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf, & ! inout
                     qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, ptend_all%q, troplev, & ! inout
                     errmsg, errflg ) ! out
 
