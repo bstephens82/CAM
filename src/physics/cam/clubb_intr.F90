@@ -2487,8 +2487,8 @@ end subroutine clubb_init_cnst
 
     integer :: &
       errflg, &
-      j, k, t, ixind, n,      & ! Loop variables
-      k_cam, k_clubb, k_clubb_pver, & ! Loop variables
+      j, k, t, ixind, n,   & ! Loop variables
+      k_cam, k_clubb,      & ! Loop variables
       ixcldice, ixcldliq, ixnumliq, &
       ixnumice, ixq, &
       itim_old, &
@@ -2498,6 +2498,7 @@ end subroutine clubb_init_cnst
                                                     mf_L0_nadv,     &
                                                     mf_cape_nadv
 
+    ! Courant number limiter vars
     real(r8), dimension(state%ncol)      :: max_cfl_nadv, mf_freq_nadv
 
 #endif
@@ -3127,11 +3128,68 @@ end subroutine clubb_init_cnst
     call outfld( 'CLUBB_GRID_SIZE',  grid_dx,                        pcols, lchnk )
     call outfld( 'QSATFAC',          qsatfac_pbuf,                   pcols, lchnk )
 
-
     ! --------------------------------------------------------------- !
     ! Writing state variables after EDMF scheme for detailed analysis !
     ! --------------------------------------------------------------- !
     if (do_clubb_mf) then
+      call output_mf_diagnostics()
+    end if
+
+    !  Output CLUBB history here
+    if (stats_metadata%l_stats) then
+
+      do j = 1, stats_zt(1)%num_output_fields
+
+        temp1 = trim(stats_zt(1)%file%grid_avg_var(j)%name)
+        sub   = temp1
+        if (len(temp1) >  max_fieldname_len) sub = temp1(1:max_fieldname_len)
+
+        call outfld(trim(sub), out_zt(:,:,j), pcols, lchnk )
+      enddo
+
+      do j = 1, stats_zm(1)%num_output_fields
+
+        temp1 = trim(stats_zm(1)%file%grid_avg_var(j)%name)
+        sub   = temp1
+        if (len(temp1) > max_fieldname_len) sub = temp1(1:max_fieldname_len)
+
+        call outfld(trim(sub),out_zm(:,:,j), pcols, lchnk)
+      enddo
+
+      if (stats_metadata%l_output_rad_files) then
+        do j = 1, stats_rad_zt(1)%num_output_fields
+          call outfld(trim(stats_rad_zt(1)%file%grid_avg_var(j)%name), out_radzt(:,:,j), pcols, lchnk)
+        enddo
+
+        do j = 1, stats_rad_zm(1)%num_output_fields
+          call outfld(trim(stats_rad_zm(1)%file%grid_avg_var(j)%name), out_radzm(:,:,j), pcols, lchnk)
+        enddo
+      endif
+
+      do j = 1, stats_sfc(1)%num_output_fields
+        call outfld(trim(stats_sfc(1)%file%grid_avg_var(j)%name), out_sfc(:,:,j), pcols, lchnk)
+      enddo
+
+    endif
+    call t_stopf('clubb_tend_cam:non_acc_region')
+
+    ! Cleanup err_info
+!    call cleanup_err_info_api(err_info)
+#endif
+
+    call t_stopf('clubb_tend_cam')
+
+    return
+
+  contains
+
+#ifdef CLUBB_SGS
+
+    subroutine output_mf_diagnostics()
+      implicit none
+
+      integer :: k, k_clubb, k_clubb_pver
+
       ! Initialize Output arrays
       mf_dry_a_output(:ncol,:)     = 0._r8
       mf_moist_a_output(:ncol,:)   = 0._r8
@@ -3346,53 +3404,10 @@ end subroutine clubb_init_cnst
       call outfld( 'edmf_freq'     , mf_freq_output,            pcols, lchnk )
       call outfld( 'edmf_cape'     , mf_cape_output,            pcols, lchnk )
       call outfld( 'edmf_cfl'      , mf_cfl_output,             pcols, lchnk )
-    end if
 
-    !  Output CLUBB history here
-    if (stats_metadata%l_stats) then
+    end subroutine output_mf_diagnostics
 
-      do j = 1, stats_zt(1)%num_output_fields
-
-        temp1 = trim(stats_zt(1)%file%grid_avg_var(j)%name)
-        sub   = temp1
-        if (len(temp1) >  max_fieldname_len) sub = temp1(1:max_fieldname_len)
-
-        call outfld(trim(sub), out_zt(:,:,j), pcols, lchnk )
-      enddo
-
-      do j = 1, stats_zm(1)%num_output_fields
-
-        temp1 = trim(stats_zm(1)%file%grid_avg_var(j)%name)
-        sub   = temp1
-        if (len(temp1) > max_fieldname_len) sub = temp1(1:max_fieldname_len)
-
-        call outfld(trim(sub),out_zm(:,:,j), pcols, lchnk)
-      enddo
-
-      if (stats_metadata%l_output_rad_files) then
-        do j = 1, stats_rad_zt(1)%num_output_fields
-          call outfld(trim(stats_rad_zt(1)%file%grid_avg_var(j)%name), out_radzt(:,:,j), pcols, lchnk)
-        enddo
-
-        do j = 1, stats_rad_zm(1)%num_output_fields
-          call outfld(trim(stats_rad_zm(1)%file%grid_avg_var(j)%name), out_radzm(:,:,j), pcols, lchnk)
-        enddo
-      endif
-
-      do j = 1, stats_sfc(1)%num_output_fields
-        call outfld(trim(stats_sfc(1)%file%grid_avg_var(j)%name), out_sfc(:,:,j), pcols, lchnk)
-      enddo
-
-    endif
-    call t_stopf('clubb_tend_cam:non_acc_region')
-
-    ! Cleanup err_info
-!    call cleanup_err_info_api(err_info)
 #endif
-
-    call t_stopf('clubb_tend_cam')
-
-    return
 
   end subroutine clubb_tend_cam
 
