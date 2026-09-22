@@ -35,7 +35,7 @@ module aerosol_properties_mod
      real(r8), allocatable :: rhcrystal_(:)   ! crystallization RH
      real(r8), allocatable :: rhdeliques_(:)  ! deliquescence RH
      ! Abdul-Razzak, H., S.J. Ghan, and C. Rivera-Carpio, A parameterization of aerosol activation,
-     ! 1, Singleaerosoltype. J. Geophys. Res., 103, 6123-6132, 1998.
+     ! 1, Singleaerosoltype. J. Geophys. Res., 103, 6123-6132, 1998. https://doi.org/10.1029/97JD03735
      real(r8) :: soa_equivso4_factor_ = -huge(1._r8)
      real(r8) :: pom_equivso4_factor_ = -huge(1._r8)
      integer, public :: list_idx_ = 0 ! radiation list index (0=climate)
@@ -109,7 +109,7 @@ module aerosol_properties_mod
      !  long wave species refractive indices
      !  species morphology
      !------------------------------------------------------------------------
-     subroutine aero_props_get(self, bin_ndx, species_ndx, density, hygro, &
+     subroutine aero_props_get(self, bin_ndx, species_ndx, density, hygro, spec_mw, &
           spectype, specname, specmorph, refindex_sw, refindex_lw, num_to_mass_aer, &
           dryrad)
        import :: aerosol_properties, r8
@@ -118,6 +118,7 @@ module aerosol_properties_mod
        integer, intent(in) :: species_ndx         ! species index
        real(r8), optional, intent(out) :: density ! density (kg/m3)
        real(r8), optional, intent(out) :: hygro   ! hygroscopicity
+       real(r8), optional, intent(out) :: spec_mw ! species molecular weight
        character(len=*), optional, intent(out) :: spectype  ! species type
        character(len=*), optional, intent(out) :: specname  ! species name
        character(len=*), optional, intent(out) :: specmorph ! species morphology
@@ -701,13 +702,14 @@ contains
   !------------------------------------------------------------------------------
   ! returns maximum supersaturation
   !------------------------------------------------------------------------------
-  function maxsat(self, zeta,eta,smc) result(smax)
+  pure function maxsat(self, zeta,eta,smc) result(smax)
 
     !-------------------------------------------------------------------------
     ! Calculates maximum supersaturation for multiple competing aerosols.
     !
     ! Abdul-Razzak and Ghan, A parameterization of aerosol activation.
     ! 2. Multiple aerosol types. J. Geophys. Res., 105, 6837-6844., 2000
+    ! https://doi.org/10.1029/1999JD901161
     !-------------------------------------------------------------------------
 
     class(aerosol_properties), intent(in) :: self

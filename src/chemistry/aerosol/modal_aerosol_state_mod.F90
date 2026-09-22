@@ -3,16 +3,14 @@ module modal_aerosol_state_mod
   use shr_spfn_mod, only: erf => shr_spfn_erf
   use aerosol_state_mod, only: aerosol_state, ptr2d_t
   use radiative_aerosol, only: rad_aer_get_info, rad_aer_get_mode_props
-  !REMOVECAM
-  use aerosol_mmr_cam, only: rad_cnst_get_aer_mmr, rad_cnst_get_mode_num
-  !REMOVECAM_END
+  use aerosol_mmr_host, only: rad_cnst_get_aer_mmr, rad_cnst_get_mode_num, aero_host_binding_t
   !REMOVECAM: no longer need pbuf and state after CAM is retired
-  use physics_buffer, only: physics_buffer_desc, pbuf_get_field, pbuf_get_index
-  use physics_types, only: physics_state
+  use physics_buffer, only: pbuf_get_field, pbuf_get_index
   !REMOVECAM_END
-  use aerosol_properties_mod, only: aerosol_properties
+  use aerosol_properties_mod, only: aerosol_properties, aero_name_len
   use physconst,  only: rhoh2o
   use cam_abortutils, only: endrun
+  use ppgrid, only:  pver
 
   implicit none
 
@@ -22,10 +20,10 @@ module modal_aerosol_state_mod
 
   type, extends(aerosol_state) :: modal_aerosol_state
      private
-     !REMOVECAM: state and pbuf will be replaced by SIMA MMR API
-     type(physics_state), pointer :: state => null()
-     type(physics_buffer_desc), pointer :: pbuf(:) => null()
-     !REMOVECAM_END
+      ! Opaque host-binding handle used to retrieve aerosol fields from
+      ! host model data; built by aerosol_instances_mod.
+      ! This keeps model-specific data structures outside of the aerosol interface.
+     type(aero_host_binding_t) :: host_
    contains
 
      procedure :: get_transported
@@ -49,6 +47,8 @@ module modal_aerosol_state_mod
      procedure :: wet_diameter
      procedure :: convcld_actfrac
      procedure :: wgtpct
+     procedure :: aqu_gain_binfraction
+     procedure :: surf_area_dens
 
      final :: destructor
 
@@ -64,9 +64,9 @@ contains
 
   !------------------------------------------------------------------------------
   !------------------------------------------------------------------------------
-  function constructor(state,pbuf,list_idx) result(newobj)
-    type(physics_state), target :: state
-    type(physics_buffer_desc), pointer :: pbuf(:)
+  function constructor(ncol, host, list_idx) result(newobj)
+    integer, intent(in) :: ncol
+    type(aero_host_binding_t), intent(in) :: host
     integer, intent(in), optional :: list_idx
 
     type(modal_aerosol_state), pointer :: newobj
@@ -79,8 +79,8 @@ contains
        return
     end if
 
-    newobj%state => state
-    newobj%pbuf => pbuf
+    call newobj%set_ncol(ncol)
+    newobj%host_ = host
 
     if (present(list_idx)) call newobj%set_list_idx(list_idx)
 
@@ -91,8 +91,8 @@ contains
   subroutine destructor(self)
     type(modal_aerosol_state), intent(inout) :: self
 
-    nullify(self%state)
-    nullify(self%pbuf)
+    ! disassociate the host binding (data referenced within is not owned here)
+    self%host_ = aero_host_binding_t()
 
   end subroutine destructor
 
@@ -135,7 +135,7 @@ contains
     mmr_tot = 0._r8
 
     do spec_ndx=1,aero_props%nspecies(bin_ndx)
-       call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, spec_ndx, 'a', self%state, self%pbuf, mmrptr)
+       call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, spec_ndx, 'a', self%host_, mmrptr)
        mmr_tot = mmr_tot + mmrptr(col_ndx,lyr_ndx)
     end do
 
@@ -150,7 +150,7 @@ contains
     integer, intent(in) :: bin_ndx      ! bin index
     real(r8), pointer :: mmr(:,:)       ! mass mixing ratios (ncol,nlev)
 
-    call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, species_ndx, 'a', self%state, self%pbuf, mmr)
+    call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, species_ndx, 'a', self%host_, mmr)
   end subroutine get_ambient_mmr
 
   !------------------------------------------------------------------------------
@@ -162,7 +162,7 @@ contains
     integer, intent(in) :: bin_ndx      ! bin index
     real(r8), pointer :: mmr(:,:)       ! mass mixing ratios (ncol,nlev)
 
-    call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, species_ndx, 'c', self%state, self%pbuf, mmr)
+    call rad_cnst_get_aer_mmr(self%list_idx_, bin_ndx, species_ndx, 'c', self%host_, mmr)
   end subroutine get_cldbrne_mmr
 
   !------------------------------------------------------------------------------
@@ -173,7 +173,7 @@ contains
     integer, intent(in) :: bin_ndx     ! bin index
     real(r8), pointer   :: num(:,:)    ! number densities
 
-    call rad_cnst_get_mode_num(self%list_idx_, bin_ndx, 'a', self%state, self%pbuf, num)
+    call rad_cnst_get_mode_num(self%list_idx_, bin_ndx, 'a', self%host_, num)
   end subroutine get_ambient_num
 
   !------------------------------------------------------------------------------
@@ -184,7 +184,7 @@ contains
     integer, intent(in) :: bin_ndx             ! bin index
     real(r8), pointer :: num(:,:)
 
-    call rad_cnst_get_mode_num(self%list_idx_, bin_ndx, 'c', self%state, self%pbuf, num)
+    call rad_cnst_get_mode_num(self%list_idx_, bin_ndx, 'c', self%host_, num)
   end subroutine get_cldbrne_num
 
   !------------------------------------------------------------------------------
@@ -215,7 +215,6 @@ contains
   ! return aerosol bin size weights for a given bin
   !------------------------------------------------------------------------------
   subroutine icenuc_size_wght_arr(self, bin_ndx, ncol, nlev, species_type, use_preexisting_ice, wght)
-    use aerosol_properties_mod, only: aero_name_len
 
     class(modal_aerosol_state), intent(in) :: self
     integer, intent(in) :: bin_ndx                ! bin number
@@ -249,7 +248,7 @@ contains
              wght(:ncol,:) = 1._r8
           else
              call rad_aer_get_mode_props(0, bin_ndx, sigmag=sigmag_aitken)
-             call pbuf_get_field(self%pbuf, pbuf_get_index('DGNUM' ), dgnum)
+             call pbuf_get_field(self%host_%pbuf, pbuf_get_index('DGNUM' ), dgnum)
              do k = 1,nlev
                 do i = 1,ncol
                    if (dgnum(i,k,bin_ndx) > 0._r8) then
@@ -278,7 +277,6 @@ contains
   ! return aerosol bin size weights for a given bin, column and vertical layer
   !------------------------------------------------------------------------------
   subroutine icenuc_size_wght_val(self, bin_ndx, col_ndx, lyr_ndx, species_type, use_preexisting_ice, wght)
-    use aerosol_properties_mod, only: aero_name_len
 
     class(modal_aerosol_state), intent(in) :: self
     integer, intent(in) :: bin_ndx                ! bin number
@@ -311,7 +309,7 @@ contains
              wght = 1._r8
           else
              call rad_aer_get_mode_props(0, bin_ndx, sigmag=sigmag_aitken)
-             call pbuf_get_field(self%pbuf, pbuf_get_index('DGNUM' ), dgnum)
+             call pbuf_get_field(self%host_%pbuf, pbuf_get_index('DGNUM' ), dgnum)
 
              if (dgnum(col_ndx,lyr_ndx,bin_ndx) > 0._r8) then
                 ! only allow so4 with D>0.1 um in ice nucleation
@@ -338,9 +336,6 @@ contains
   ! returns aerosol type weights for a given aerosol type and bin
   !------------------------------------------------------------------------------
   subroutine icenuc_type_wght(self, bin_ndx, ncol, nlev, species_type, aero_props, rho, wght, cloud_borne)
-
-    use aerosol_properties_mod, only: aerosol_properties
-    use aerosol_properties_mod, only: aero_name_len
 
     class(modal_aerosol_state), intent(in) :: self
     integer, intent(in) :: bin_ndx                ! bin number
@@ -418,7 +413,6 @@ contains
   ! as heterogeneous freezing nuclei
   !------------------------------------------------------------------------------
   function hetfrz_size_wght(self, bin_ndx, ncol, nlev) result(wght)
-    use aerosol_properties_mod, only: aero_name_len
 
     class(modal_aerosol_state), intent(in) :: self
     integer, intent(in) :: bin_ndx             ! bin number
@@ -488,8 +482,8 @@ contains
 
     if (self%list_idx_ == 0) then
        ! water uptake and wet radius for the climate list has already been calculated
-       call pbuf_get_field(self%pbuf, pbuf_get_index('DGNUMWET'), dgnumwet_m)
-       call pbuf_get_field(self%pbuf, pbuf_get_index('QAERWAT'),  qaerwat_m)
+       call pbuf_get_field(self%host_%pbuf, pbuf_get_index('DGNUMWET'), dgnumwet_m)
+       call pbuf_get_field(self%host_%pbuf, pbuf_get_index('QAERWAT'),  qaerwat_m)
 
        dgnumwet(:ncol,:nlev) = dgnumwet_m(:ncol,:nlev,bin_idx)
        qaerwat (:ncol,:nlev) =  qaerwat_m(:ncol,:nlev,bin_idx)
@@ -507,9 +501,9 @@ contains
           qaerwat = -huge(1._r8)
           return
        end if
-       call modal_aero_calcsize_diag(self%state, self%pbuf, aero_props, self, dgnumdry_m, hygro_m, &
+       call modal_aero_calcsize_diag(self%host_%state, self%host_%pbuf, aero_props, self, dgnumdry_m, hygro_m, &
                                      dryvol_m, dryrad_m, drymass_m, so4dryvol_m, naer_m)
-       call modal_aero_wateruptake_dr(self%state, self%pbuf, aero_props, self, dgnumdry_m, dgnumwet_m, &
+       call modal_aero_wateruptake_dr(self%host_%state, self%host_%pbuf, aero_props, self, dgnumdry_m, dgnumwet_m, &
                                       qaerwat_m, wetdens_m, hygro_m, dryvol_m, dryrad_m, &
                                       drymass_m, so4dryvol_m, naer_m)
 
@@ -624,7 +618,7 @@ contains
 
     real(r8), pointer :: dgnumwet(:,:,:)
 
-    call pbuf_get_field(self%pbuf, pbuf_get_index('DGNUMWET'), dgnumwet)
+    call pbuf_get_field(self%host_%pbuf, pbuf_get_index('DGNUMWET'), dgnumwet)
 
     diam(:ncol,:nlev) = dgnumwet(:ncol,:nlev,bin_idx)
 
@@ -634,7 +628,6 @@ contains
   ! prescribed aerosol activation fraction for convective cloud
   !------------------------------------------------------------------------------
   function convcld_actfrac(self, aero_props, ibin, ispc, ncol, nlev) result(frac)
-    use aerosol_properties_mod, only: aero_name_len
 
     class(modal_aerosol_state), intent(in) :: self
     class(aerosol_properties), intent(in) :: aero_props ! aerosol properties object
@@ -722,5 +715,256 @@ contains
     wtp(:,:) = -huge(1._r8)
 
   end function wgtpct
+
+  !------------------------------------------------------------------------------
+  ! aqueous chemistry partitioning -- used in sox_cldaero_update
+  !------------------------------------------------------------------------------
+  subroutine aqu_gain_binfraction(self, aero_props, type, qcw, delso4_o3rxn, faqgain)
+
+    class(modal_aerosol_state), intent(in) :: self
+    class(aerosol_properties), intent(in) :: aero_props ! aerosol properties object
+    character(len=*), intent(in) :: type                ! aerosol species type
+    real(r8), intent(in) :: qcw(:,:,:)                  ! cloud-borne aerosol volume mixing ratio
+    real(r8), intent(in) :: delso4_o3rxn(:,:)           ! sulfate concentration change due to oxidation
+    real(r8), intent(out) :: faqgain(:,:,:)             ! fraction gain in each mode / bin
+
+    character(len=aero_name_len) :: modetype, spectype
+    integer :: i,k,l,m,n,mm, ncol, nbins
+    integer :: accum_n
+    real(r8) :: sumf
+    real(r8), allocatable :: qnum_c(:)
+
+    ncol = self%ncol()
+    nbins = aero_props%nbins()
+
+    !-------------------------------------------------------------------------
+    ! compute factors for partitioning aerosol mass gains among modes.
+    ! The factors are proportional to the activated particle MR for each
+    ! mode, which is the MR of cloud drops "associated with" the mode
+    ! thus we are assuming the cloud drop size is independent of the
+    ! associated aerosol mode properties (i.e., drops associated with
+    ! Aitken and coarse sea-salt particles are same size)
+    !
+    ! qnum_c(n) = activated particle number MR for mode n (these are just
+    ! used for partitioning among modes, so don't need to divide by cldfrc)
+    !-------------------------------------------------------------------------
+
+    accum_n = -1
+    do m = 1, nbins
+       call rad_aer_get_info(0, m, mode_type=modetype)
+       if (modetype=='accum') then
+          accum_n = m
+       end if
+    end do
+
+    allocate(qnum_c(nbins))
+
+    faqgain = 0.0_r8
+
+    lev_loop: do k = 1,pver
+       col_loop: do i = 1,ncol
+          do m = 1, nbins
+             mm = aero_props%indexer(m,0)
+             qnum_c(m) = max( 0.0_r8, qcw(i,k,mm) )
+           end do
+
+          ! force qnum_c(n) to be positive for n=modeptr_accum or n=1
+          n = accum_n
+          if (n <= 0) n = 1
+          qnum_c(n) = max( 1.0e-10_r8, qnum_c(n) )
+
+          ! faqgain_so4(n) = fraction of total so4_c gain going to mode n
+          ! these are proportional to the activated particle MR for each mode
+          sumf = 0.0_r8
+          do n = 1, nbins
+             do l = 1, aero_props%nspecies(n)
+                call  aero_props%get(n,l, spectype=spectype)
+                if (trim(spectype) == trim(type)) then
+                   faqgain(n,i,k) = qnum_c(n)
+                   sumf = sumf + faqgain(n,i,k)
+                end if
+             end do
+          end do
+
+          if (sumf > 0.0_r8) then
+             do n = 1, nbins
+                faqgain(n,i,k) = faqgain(n,i,k) / sumf
+             end do
+          end if
+          ! at this point (sumf <= 0.0) only when all the faqgain_so4 are zero
+
+       end do col_loop
+    end do lev_loop
+
+    deallocate(qnum_c)
+
+  end subroutine aqu_gain_binfraction
+
+  !------------------------------------------------------------------------
+  ! aerosol surface area density
+  !------------------------------------------------------------------------
+  subroutine surf_area_dens(self, aero_props, types_list, ncol, nlev, beglev, endlev, &
+       relhum, pmid, temp, pi, sad, reff, sfc, dm_aer)
+    use aerosol_spec_utils, only : spec_type_in_list
+
+    class(modal_aerosol_state), intent(in) :: self
+    class(aerosol_properties), intent(in) :: aero_props ! aerosol properties object
+    character(len=*), intent(in) :: types_list(:) ! list of aerosol types to include
+    integer,  intent(in)  :: ncol        ! number of columns
+    integer,  intent(in)  :: nlev        ! number of levels
+    integer,  intent(in)  :: beglev(:)   ! beginning model level index
+    integer,  intent(in)  :: endlev(:)   ! ending model level index
+    real(r8), intent(in)  :: relhum(:,:) ! relative humidity
+    real(r8), intent(in)  :: pmid(:,:)   ! mid-level pressure (Pa)
+    real(r8), intent(in)  :: temp(:,:)   ! temperature (K)
+    real(r8), intent(in)  :: pi          ! pi mathematical constant
+
+    real(r8), intent(out) :: sad(:,:)    ! surface area density (cm2/cm3)
+    real(r8), intent(out) :: reff(:,:)   ! effective radius (units cm)
+    real(r8), optional, intent(out) :: sfc(:,:,:) ! surface area density per bin (cm2/cm3)
+    real(r8), optional, intent(out) :: dm_aer(:,:,:) ! diameter per bin (cm)
+
+    ! local vars
+    real(r8), allocatable ::sad_mode(:,:,:)
+    real(r8), allocatable ::vol_mode(:,:,:)
+
+    real(r8) :: radeff(ncol,nlev)
+    real(r8) :: vol(ncol,nlev)
+    real(r8) :: rho_air
+    integer  :: i,k,l,m
+    real(r8) :: chm_mass, tot_mass
+    integer  :: idx_chm_val, ierr
+    real(r8), pointer :: mmr(:,:)       ! mass mixing ratios (ncol,nlev)
+    real(r8), pointer :: num(:,:)
+    real(r8), pointer :: diam(:,:,:)
+
+    character(len=32) :: modetype
+    character(len=32) :: spectype
+
+    ! for per-mode / per-species lookups outside the column loop:
+    integer :: nbins, nspec_max
+    type(ptr2d_t), allocatable :: mmr_ptr(:,:)  ! interstitial mmr field per (bin,species)
+    type(ptr2d_t), allocatable :: num_ptr(:)    ! interstitial number field per bin
+    logical,  allocatable :: in_list(:,:)       ! species type is in types_list
+    logical,  allocatable :: use_mode(:)        ! mode contributes to the mass weighting
+    real(r8), allocatable :: alogsig(:)         ! ln(geometric standard deviation) per mode
+
+    character(len=*), parameter :: subname = 'modal_aerosol_state_mod::surf_area_dens'
+
+    call pbuf_get_field(self%host_%pbuf, pbuf_get_index('DGNUMWET'), diam)
+
+    !
+    ! Compute surface aero for each mode.
+    ! Total over all modes as the surface area for chemical reactions.
+    !
+    nbins = aero_props%nbins()
+
+    allocate(sad_mode(ncol,nlev,nbins),stat=ierr)
+    if (ierr/=0) then
+       call endrun(subname//': sad_mode array allocate error')
+    end if
+
+    allocate(vol_mode(ncol,nlev,nbins),stat=ierr)
+    if (ierr/=0) then
+       call endrun(subname//': vol_mode array allocate error')
+    end if
+
+    ! resolve mode geometry, species types and field pointers that do not vary over columns or levels here:
+    nspec_max = 0
+    do l = 1,nbins
+       nspec_max = max(nspec_max, aero_props%nspecies(l))
+    end do
+
+    allocate(mmr_ptr(nbins,nspec_max), num_ptr(nbins), in_list(nbins,nspec_max), &
+             use_mode(nbins), alogsig(nbins), stat=ierr)
+    if (ierr/=0) then
+       call endrun(subname//': mode lookup arrays allocate error')
+    end if
+
+    in_list(:,:) = .false.
+
+    do l = 1,nbins
+       call self%get_ambient_num(bin_ndx=l, num=num_ptr(l)%fld)
+       alogsig(l) = aero_props%alogsig(l)
+
+       ! ignore primary carbon mode
+       call rad_aer_get_info(self%list_idx_, l, mode_type=modetype)
+       use_mode(l) = trim(modetype) /= 'primary_carbon' ! ignore the primary_carbon mode
+
+       if (use_mode(l)) then
+          do m = 1,aero_props%nspecies(l)
+             call aero_props%get(bin_ndx=l, species_ndx=m, spectype=spectype)
+             call self%get_ambient_mmr(species_ndx=m, bin_ndx=l, mmr=mmr_ptr(l,m)%fld)
+             in_list(l,m) = spec_type_in_list(spectype, types_list)
+          end do
+       end if
+    end do
+
+    sad = 0._r8
+    sad_mode = 0._r8
+    vol = 0._r8
+    vol_mode = 0._r8
+    reff = 0._r8
+
+    do i = 1,ncol
+       do k = beglev(i), endlev(i)
+          rho_air = pmid(i,k)/(temp(i,k)*287.04_r8)
+          do l=1,nbins
+             !
+             ! compute a mass weighting of the number
+             !
+             tot_mass = 0._r8
+             chm_mass = 0._r8
+
+             if ( use_mode(l) ) then
+
+                do m=1,aero_props%nspecies(l)
+
+                   mmr => mmr_ptr(l,m)%fld
+
+                   tot_mass = tot_mass + mmr(i,k)
+
+                   if (in_list(l,m)) then
+                      chm_mass = chm_mass + mmr(i,k)
+                   end if
+                end do
+
+             end if
+
+             if ( tot_mass > 0._r8 ) then
+
+                num => num_ptr(l)%fld
+
+              ! surface area density
+               sad_mode(i,k,l) = chm_mass /tot_mass &
+                               * num(i,k)*rho_air*pi*diam(i,k,l)**2._r8 &
+                               * exp(2._r8*alogsig(l)**2._r8)  ! m^2/m^3
+
+               sad_mode(i,k,l) = 1.e-2_r8 * sad_mode(i,k,l) ! cm^2/cm^3
+
+              ! volume calculation, for use in effective radius calculation
+               vol_mode(i,k,l) = chm_mass/tot_mass &
+                               * num(i,k)*rho_air*pi/6._r8*diam(i,k,l)**3._r8  &
+                               * exp(4.5_r8*alogsig(l)**2._r8)  ! m^3/m^3 = cm^3/cm^3
+             else
+               sad_mode(i,k,l) = 0._r8
+               vol_mode(i,k,l) = 0._r8
+             end if
+          end do
+          sad(i,k) = sum(sad_mode(i,k,:))
+          vol(i,k) = sum(vol_mode(i,k,:))
+          reff(i,k) = 3._r8*vol(i,k)/sad(i,k)
+
+       enddo
+    enddo
+
+    if (present(sfc)) sfc(:ncol,:,:) = sad_mode(:ncol,:,:)
+    if (present(dm_aer)) dm_aer(:ncol,:,:) = diam(:ncol,:,:) * 1.e2_r8 ! convert m to cm
+
+    deallocate(sad_mode)
+    deallocate(vol_mode)
+    deallocate(mmr_ptr, num_ptr, in_list, use_mode, alogsig)
+
+  end subroutine surf_area_dens
 
 end module modal_aerosol_state_mod
