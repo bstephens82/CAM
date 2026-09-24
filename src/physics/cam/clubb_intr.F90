@@ -2911,18 +2911,18 @@ end subroutine clubb_init_cnst
                     rhminl_const, rhminl_adj_land_const, rhminh_const, & ! in
                     dp1, dp2, zvir, rair, cpair, gravit, karman, & ! in
                     calday, tropp_days, & ! in
-                    state_loc%lat, state_loc%phis, cam_in%landfrac, cam_in%snowhland, & ! in
-                    cam_in%wsx, cam_in%wsy, cam_in%shf, & ! in
+                    state_loc%lat, state_loc%phis, state_loc%t, state_loc%q, & ! in 
                     state_loc%pint, state_loc%pmid, state_loc%pdel, state_loc%pdeldry, & ! in
-                    rcm, cloud_frac, state_loc%t, exner, & ! in
-                    state_loc%exner, state_loc%zm, state_loc%zi, state_loc%u, & ! in
-                    state_loc%v, cmfmc, cam_in%cflx, state_loc%q, & ! in
+                    state_loc%zm, state_loc%zi, state_loc%u, state_loc%v, state_loc%exner, & ! in
+                    cam_in%landfrac, cam_in%snowhland, cam_in%wsx, & ! in
+                    cam_in%wsy, cam_in%shf, cam_in%cflx, ptend_all%q, & ! in
+                    rcm, cloud_frac, exner, cmfmc, & ! in
                     single_column, scm_cambfb_mode, lq, & ! in
                     cnst_type, scm_clubb_iop_name, subcol_scheme, & ! in
                     mf_cloudfrac_output, mf_qc_output, & ! in
                     pblh_pbuf, alst_pbuf, qlst_pbuf, deepcu_pbuf, shalcu_pbuf, & ! inout
                     cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf, & ! inout
-                    qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, ptend_all%q, troplev(:ncol), & ! inout
+                    qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, troplev(:ncol), & ! inout
                     errmsg, errflg ) ! out
 
     if (errflg /= 0) then
