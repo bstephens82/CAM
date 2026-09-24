@@ -2107,8 +2107,8 @@ end subroutine clubb_init_cnst
       err_info_type,        &
       cleanup_err_info_api
 
-!BAS still using aist_vector here but prob need to move to SIMA side
-    use cldfrc2m,                  only: aist_vector, rhmini_const, rhmaxi_const, rhminis_const, rhmaxis_const
+    use cldfrc2m,                  only: rhmini_const, rhmaxi_const, rhminis_const, rhmaxis_const, &
+                                         rhminl_const, rhminl_adj_land_const, rhminh_const
     use cam_history,               only: outfld
 
     use macrop_driver,             only: liquid_macro_tend
@@ -2905,63 +2905,10 @@ end subroutine clubb_init_cnst
     !REMOVECAM_END
     call tropopause_findChemTrop( state, troplev )
 
-    aist_pbuf(:,:top_lev-1) = 0._r8
-    qsatfac_pbuf(:, :) = 0._r8
-
-    rhmini_default(:) = rhmini_const
-    rhmaxi_default(:) = rhmaxi_const
-    rhminl_arr(:) = rhminl_const
-    rhminl_adj_land_arr(:) = rhminl_adj_land_const
-    rhminh_arr(:) = rhminh_const
-
-    do k = top_lev, pver
-
-      ! For Type II PSC and for thin cirrus, the clouds can be thin, but
-      ! extensive and they should start forming when the gridbox mean saturation
-      ! reaches 1.0.
-      !
-      ! For now, use the tropopause diagnostic to determine where the Type II
-      ! PSC should be, but in the future wold like a better metric that can also
-      ! identify the level for thin cirrus. Include the tropopause level so that
-      ! the cold point tropopause will use the stratospheric values.
-      where (k <= troplev)
-        rhmini = rhminis_const
-        rhmaxi = rhmaxis_const
-      elsewhere
-        rhmini = rhmini_const
-        rhmaxi = rhmaxi_const
-      end where
-
-      !REMOVECAM: this is no longer needed when CAM is retired and pcols no longer exists
-      aist_pbuf(:,k) = 0._r8
-      !REMOVECAM_END
-      if ( trim(subcol_scheme) == 'SILHS' ) then
-        call aist_vector(state_loc%q(:ncol,k,ixq), state_loc%t(:ncol,k), &
-             state_loc%pmid(:ncol,k), state_loc%q(:ncol,k,ixcldice), &
-             state_loc%q(:ncol,k,ixnumice), cam_in%landfrac(:ncol), &
-             cam_in%snowhland(:ncol), aist_pbuf(:ncol,k), ncol, &
-             rhmaxi_in=rhmaxi_default(:ncol), &
-             rhmini_in=rhmini_default(:ncol), &
-             rhminl_in=rhminl_arr(:ncol), &
-             rhminl_adj_land_in=rhminl_adj_land_arr(:ncol), &
-             rhminh_in=rhminh_arr(:ncol))
-      else
-        call aist_vector(state_loc%q(:ncol,k,ixq), state_loc%t(:ncol,k), &
-             state_loc%pmid(:ncol,k), state_loc%q(:ncol,k,ixcldice), &
-             state_loc%q(:ncol,k,ixnumice), cam_in%landfrac(:ncol), &
-             cam_in%snowhland(:ncol), aist_pbuf(:ncol,k), ncol, &
-             rhmaxi_in=rhmaxi(:ncol), &
-             rhmini_in=rhmini(:ncol), &
-             rhminl_in=rhminl_arr(:ncol), &
-             rhminl_adj_land_in=rhminl_adj_land_arr(:ncol), &
-             rhminh_in=rhminh_arr(:ncol), &
-             qsatfac_out=qsatfac_pbuf(:ncol,k))
-      endif
-    enddo
-
     call clubb3_run(ncol, pver, pverp, pcnst, top_lev, & ! in
                     ixq, ixcldice, ixcldliq, ixnumice, & ! in
                     rhminis_const, rhmaxis_const, rhmini_const, rhmaxi_const, & ! in
+                    rhminl_const, rhminl_adj_land_const, rhminh_const, & ! in
                     dp1, dp2, zvir, rair, cpair, gravit, karman, & ! in
                     calday, tropp_days, & ! in
                     state_loc%lat, state_loc%phis, cam_in%landfrac, cam_in%snowhland, & ! in
@@ -2975,7 +2922,7 @@ end subroutine clubb_init_cnst
                     mf_cloudfrac_output, mf_qc_output, & ! in
                     pblh_pbuf, alst_pbuf, qlst_pbuf, deepcu_pbuf, shalcu_pbuf, & ! inout
                     cmfmc_sh_pbuf, dp_icwmr_pbuf, concld_pbuf, aist_pbuf, & ! inout
-                    qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, ptend_all%q, troplev, & ! inout
+                    qsatfac_pbuf, ast_pbuf, qist_pbuf, cld_pbuf, ptend_all%q, troplev(:ncol), & ! inout
                     errmsg, errflg ) ! out
 
     if (errflg /= 0) then
